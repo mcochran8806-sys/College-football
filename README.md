@@ -98,6 +98,23 @@ warning in the function logs.
 
 ## Deploying to Vercel
 
+**This project is already deployed:** <https://cfb-saturday.vercel.app>
+
+- Scoreboard TV → <https://cfb-saturday.vercel.app/>
+- Highlight wall → <https://cfb-saturday.vercel.app/highlights>
+
+The Vercel project `cfb-saturday` is linked to this GitHub repo with
+`claude/college-football-tv-dashboard-5phxjt` as the production branch, so
+every push to that branch redeploys. Deployment protection is off, so the TVs
+load it without signing in.
+
+**Remaining setup:** add `YOUTUBE_API_KEY` under Vercel → `cfb-saturday` →
+*Settings* → *Environment Variables*, then redeploy. Until then the scoreboard
+works fully and the highlight wall runs on score cards and the compact
+scoreboard.
+
+### Setting it up from scratch
+
 1. Push this repo to GitHub.
 2. <https://vercel.com/new> → *Import* the repo. Vercel detects Vite; the
    settings in `vercel.json` (build command, output directory, function config,
@@ -105,9 +122,9 @@ warning in the function logs.
 3. Before the first deploy, add the environment variable:
    - `YOUTUBE_API_KEY` = your key (Production, Preview, Development)
    - Optionally `MOCK` = `1` on a Preview branch to demo without live games.
-4. Deploy. You'll get `https://your-project.vercel.app`.
-   - Scoreboard TV → `https://your-project.vercel.app/`
-   - Highlight wall → `https://your-project.vercel.app/highlights`
+4. Deploy. You'll get `https://cfb-saturday.vercel.app`.
+   - Scoreboard TV → `https://cfb-saturday.vercel.app/`
+   - Highlight wall → `https://cfb-saturday.vercel.app/highlights`
 
 Changing `config.ts` (favorites, channels, intervals) requires a redeploy —
 it's compiled into both the client bundle and the functions.
@@ -159,7 +176,7 @@ Create the launch script — `/home/pi/cfb-kiosk.sh`:
 #!/usr/bin/env bash
 set -euo pipefail
 
-URL="${1:-https://your-project.vercel.app/}"
+URL="${1:-https://cfb-saturday.vercel.app/}"
 
 # Stop the screen blanking mid-game.
 xset s off
@@ -209,7 +226,7 @@ Type=simple
 User=pi
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/pi/.Xauthority
-ExecStart=/home/pi/cfb-kiosk.sh https://your-project.vercel.app/
+ExecStart=/home/pi/cfb-kiosk.sh https://cfb-saturday.vercel.app/
 Restart=always
 RestartSec=10
 
@@ -231,14 +248,14 @@ change the URL to `.../highlights`.
 ```bash
 # macOS
 open -na "Google Chrome" --args --kiosk --autoplay-policy=no-user-gesture-required \
-  "https://your-project.vercel.app/"
+  "https://cfb-saturday.vercel.app/"
 
 # Linux
 google-chrome --kiosk --autoplay-policy=no-user-gesture-required \
-  "https://your-project.vercel.app/"
+  "https://cfb-saturday.vercel.app/"
 
 # Windows (PowerShell)
-Start-Process chrome '--kiosk --autoplay-policy=no-user-gesture-required "https://your-project.vercel.app/"'
+Start-Process chrome '--kiosk --autoplay-policy=no-user-gesture-required "https://cfb-saturday.vercel.app/"'
 ```
 
 Or just open the URL and press **F11**. Exit kiosk with `Ctrl/Cmd+W`.
