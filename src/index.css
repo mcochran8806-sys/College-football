@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  /* Near-black, not pure black: pure #000 crushes shadow detail on most TV
+     panels and makes the panel's own dithering visible. */
+  --color-field-950: #0a0d12;
+  --color-field-900: #10151d;
+  --color-field-850: #151b25;
+  --color-field-800: #1c242f;
+  --color-field-700: #2a3441;
+  --color-field-500: #64748b;
+  --color-field-300: #cbd5e1;
+  --color-field-100: #f1f5f9;
+
+  --color-live: #22c55e;
+  --color-redzone: #ef4444;
+  --color-close: #f59e0b;
+  --color-possession: #fbbf24;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--color-field-950);
+  color: var(--color-field-100);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  /* Tabular figures keep scores from jittering as digits change. */
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+
+/* Nobody is holding a mouse. */
+* {
+  cursor: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* The one exception: the tap-to-start overlay needs a visible target. */
+.wants-cursor,
+.wants-cursor * {
+  cursor: pointer;
+}
+
+@keyframes score-pulse {
+  0% { transform: scale(1); color: var(--color-field-100); }
+  18% { transform: scale(1.18); color: var(--color-close); }
+  100% { transform: scale(1); color: var(--color-field-100); }
+}
+.animate-score-pulse {
+  animation: score-pulse 1100ms ease-out;
+}
+
+@keyframes redzone-throb {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.animate-redzone {
+  animation: redzone-throb 1.6s ease-in-out infinite;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 420ms ease-out both;
+}
+
+/* Respect the setting if a TV browser somehow reports it, but these screens
+   are ambient — motion is the point, so we only damp it. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-score-pulse,
+  .animate-redzone,
+  .animate-fade-up {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+  }
+}
