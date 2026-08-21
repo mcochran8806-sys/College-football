@@ -1,11 +1,26 @@
 /**
- * Upstream fetch helpers. ESPN's undocumented endpoints reject or throttle
- * obviously-automated clients, so we present as a normal desktop browser.
+ * Upstream fetch helpers.
+ *
+ * ============================ ON USER-AGENTS ============================
+ * This deliberately does NOT send a browser User-Agent, which is the opposite
+ * of what you'd expect for an undocumented endpoint.
+ *
+ * Measured from a Vercel function in iad1 against
+ * site.api.espn.com/.../scoreboard?groups=80&limit=100:
+ *
+ *   no headers at all ................................. 200  (99 games)
+ *   User-Agent: Chrome/126 ............................ 403  Access Denied
+ *   UA + Accept + Accept-Language ..................... 403
+ *   UA + Accept + Accept-Language + Referer ........... 403
+ *   full browser set (Sec-Fetch-*, sec-ch-ua, Origin) . 403
+ *
+ * ESPN fronts this endpoint with Akamai. A datacenter IP that *claims* to be
+ * Chrome is a textbook bot signature, so dressing the request up as a browser
+ * is what gets it blocked; an honest, plain request sails through. Adding a
+ * User-Agent here will take the whole dashboard down — the failure is a 403
+ * with an HTML "Access Denied" body, not a JSON error.
+ * ========================================================================
  */
-
-const USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-  '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
 export class UpstreamError extends Error {
   constructor(
@@ -18,19 +33,15 @@ export class UpstreamError extends Error {
   }
 }
 
-export async function fetchJson<T>(url: string, timeoutMs = 8000): Promise<T> {
+export async function fetchJson<T>(
+  url: string,
+  timeoutMs = 8000,
+  headers: Record<string, string> = {},
+): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': USER_AGENT,
-        Accept: 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        Referer: 'https://www.espn.com/',
-      },
-    });
+    const res = await fetch(url, { signal: controller.signal, headers });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       throw new UpstreamError(
@@ -46,6 +57,31 @@ export async function fetchJson<T>(url: string, timeoutMs = 8000): Promise<T> {
     throw new UpstreamError(`Upstream fetch failed for ${redact(url)}: ${msg}`);
   } finally {
     clearTimeout(timer);
+  }
+}
+
+const ESPN_PRIMARY_HOST = 'site.api.espn.com';
+const ESPN_FALLBACK_HOST = 'site.web.api.espn.com';
+
+/**
+ * ESPN fetch with a host fallback.
+ *
+ * site.web.api.espn.com serves byte-identical payloads from a different edge
+ * config, and in testing it answered 200 even to requests the primary host
+ * rejected. If Akamai's policy on the primary shifts mid-season, this keeps
+ * the dashboard alive without a redeploy.
+ */
+export async function fetchEspnJson<T>(url: string, timeoutMs = 8000): Promise<T> {
+  try {
+    return await fetchJson<T>(url, timeoutMs);
+  } catch (err) {
+    const blocked = err instanceof UpstreamError && (err.status === 403 || err.status === 429);
+    if (!blocked || !url.includes(ESPN_PRIMARY_HOST)) throw err;
+
+    console.warn(
+      `[espn] ${(err as UpstreamError).status} from ${ESPN_PRIMARY_HOST}, retrying via ${ESPN_FALLBACK_HOST}`,
+    );
+    return await fetchJson<T>(url.replace(ESPN_PRIMARY_HOST, ESPN_FALLBACK_HOST), timeoutMs);
   }
 }
 

@@ -16,7 +16,7 @@ import { favoriteInProgress } from '../shared/favorites.js';
 import type { Game, PlaysResponse, ScoringPlay } from '../shared/types.js';
 import { cached } from './_lib/cache.js';
 import { extractScoringPlays } from './_lib/espn.js';
-import { fetchJson } from './_lib/http.js';
+import { fetchEspnJson } from './_lib/http.js';
 import { isMock } from './_lib/mock.js';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import { loadScoreboard } from './scoreboard.js';
@@ -28,7 +28,7 @@ async function playsForGames(games: Game[]): Promise<ScoringPlay[]> {
   const settled = await Promise.allSettled(
     games.map(async (game) => {
       const url = `${ESPN.summary}?event=${encodeURIComponent(game.id)}`;
-      const raw = await fetchJson<unknown>(url);
+      const raw = await fetchEspnJson<unknown>(url);
       return extractScoringPlays(raw, game.id, game);
     }),
   );

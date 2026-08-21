@@ -274,8 +274,25 @@ instead of the full slate. Accepts an optional `?dates=YYYYMMDD`.
 
 Caches 15s in-process, sets `Cache-Control: s-maxage=15,
 stale-while-revalidate=30`, and strips ESPN's very large payload down to what
-the TVs render (about 13KB for a 13-game slate). On upstream failure it returns
-the last good payload with `stale: true` rather than erroring.
+the TVs render (~13KB out of ~1.2MB raw). On upstream failure it returns the
+last good payload with `stale: true` rather than erroring.
+
+**Do not add a browser User-Agent to these requests.** ESPN fronts the endpoint
+with Akamai, and a datacenter IP claiming to be Chrome is a bot signature.
+Measured from a Vercel function in `iad1`:
+
+| Request | Result |
+|---|---|
+| No headers at all | **200** (99 games) |
+| `User-Agent: Chrome/126` | 403 Access Denied |
+| UA + Accept + Accept-Language | 403 |
+| UA + Accept + Accept-Language + Referer | 403 |
+| Full browser set (Sec-Fetch-\*, sec-ch-ua, Origin) | 403 |
+
+An honest, plain request works; a disguised one gets blocked. `fetchEspnJson()`
+also falls back to `site.web.api.espn.com` (byte-identical payloads, different
+edge config) on a 403 or 429, so a mid-season policy change on the primary host
+doesn't take the dashboard down.
 
 ### `/api/highlights`
 
@@ -348,6 +365,11 @@ Played-clip and seen-play state is session memory only.
 
 ## Notes and caveats
 
+- **ESPN's default slate is the current week, not today.** With no `?dates`
+  param ESPN returns the whole week — ~99 games mid-season, which paginates to
+  ~9 screens. That's usually what you want on a Saturday (you also see
+  Thursday and Friday finals). Set `DEBUG_DATE` in `config.ts`, or pass
+  `?dates=YYYYMMDD`, to pin a single day.
 - **ESPN's endpoints are undocumented and unofficial.** The schema can shift
   mid-season. Every field access in `api/_lib/espn.ts` is optional-chained and
   coerced, and `shrinkScoreboard()` is contractually required to return a valid

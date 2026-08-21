@@ -10,7 +10,7 @@ import { CACHE_TTL, DEBUG_DATE, ESPN } from '../config.js';
 import type { Game, ScoreboardResponse } from '../shared/types.js';
 import { cached } from './_lib/cache.js';
 import { shrinkScoreboard } from './_lib/espn.js';
-import { fetchJson } from './_lib/http.js';
+import { fetchEspnJson } from './_lib/http.js';
 import { isMock } from './_lib/mock.js';
 import { q, type ApiRequest, type ApiResponse } from './_lib/types.js';
 
@@ -48,7 +48,7 @@ export async function loadScoreboard(dates: string | null): Promise<{
 
   const url = scoreboardUrl(dates);
   const result = await cached<Game[]>(`scoreboard:${dates ?? 'today'}`, CACHE_TTL.scoreboard, async () => {
-    const raw = await fetchJson<unknown>(url);
+    const raw = await fetchEspnJson<unknown>(url);
     return shrinkScoreboard(raw);
   });
 
