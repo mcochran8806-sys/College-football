@@ -41,6 +41,7 @@ export function apiPlugin(): Plugin {
         const shimmed = res as typeof res & {
           status(code: number): typeof shimmed;
           json(body: unknown): void;
+          send(body: string): void;
         };
         shimmed.status = (code: number) => {
           res.statusCode = code;
@@ -51,6 +52,12 @@ export function apiPlugin(): Plugin {
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
           }
           res.end(JSON.stringify(body));
+        };
+        shimmed.send = (body: string) => {
+          if (!res.getHeader('Content-Type')) {
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+          }
+          res.end(body);
         };
 
         const request = {

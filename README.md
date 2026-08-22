@@ -84,7 +84,17 @@ Quota resets at midnight **Pacific** time.
 
 `config.ts` ships with `TODO_VERIFY` for most channels, on purpose: a wrong
 channel ID returns an empty playlist and fails *silently*, so guessing them
-would be worse than leaving them blank. Resolve them once:
+would be worse than leaving them blank. Resolve them once. Easiest way, no local setup at all — once
+`YOUTUBE_API_KEY` is set in Vercel, open:
+
+```
+https://cfb-saturday.vercel.app/api/resolve-channels
+```
+
+It prints the real ids and a paste-ready config block. Cached 24h, so
+refreshing it can't burn quota.
+
+Or from a local checkout:
 
 ```bash
 npm run resolve-channels

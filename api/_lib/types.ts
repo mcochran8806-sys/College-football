@@ -17,6 +17,8 @@ export interface ApiResponse {
   status(code: number): ApiResponse;
   setHeader(name: string, value: string): void;
   json(body: unknown): void;
+  /** Raw body, for endpoints that serve text rather than JSON. */
+  send(body: string): void;
 }
 
 export type ApiHandler = (req: ApiRequest, res: ApiResponse) => unknown | Promise<unknown>;
