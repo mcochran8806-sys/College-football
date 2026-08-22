@@ -96,11 +96,21 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
       return;
     }
 
-    const url = `${ESPN.teams}?limit=1000`;
-    const result = await cached<PickerTeam[]>('teams', CACHE_TTL_TEAMS, async () =>
-      shrinkTeams(await fetchEspnJson<unknown>(url, 12_000)),
-    );
-    res.status(200).json({ teams: result.value, stale: result.stale });
+    // groups=80 restricts to FBS. Without it ESPN returns all 759 teams it
+    // knows about, down through Division III and NAIA, and the picker becomes
+    // a scroll past Adams State to find Alabama.
+    const url = `${ESPN.teams}?${new URLSearchParams({ groups: '80', limit: '1000' }).toString()}`;
+    const result = await cached<PickerTeam[]>('teams:fbs', CACHE_TTL_TEAMS, async () => {
+      const teams = shrinkTeams(await fetchEspnJson<unknown>(url, 12_000));
+      // FBS is ~134 schools. A much larger number means ESPN ignored groups=80
+      // and we're serving every division again — worth a log line, but still
+      // usable, so don't fail the request over it.
+      if (teams.length > 250) {
+        console.warn(`[api/teams] groups=80 appears to have been ignored: ${teams.length} teams`);
+      }
+      return teams;
+    });
+    res.status(200).json({ teams: result.value, stale: result.stale, count: result.value.length });
   } catch (err) {
     console.error('[api/teams] failed:', err);
     res.status(200).json({ teams: [], stale: true });
