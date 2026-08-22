@@ -121,3 +121,21 @@ export interface PlaysResponse {
   ageMs: number;
   mock?: boolean;
 }
+
+/** One selectable team in the /settings picker. */
+export interface PickerTeam {
+  id: string;
+  displayName: string;
+  shortDisplayName: string;
+  abbreviation: string;
+  location: string;
+  nickname: string;
+  logo: string | null;
+  color: string | null;
+}
+
+export interface TeamsResponse {
+  teams: PickerTeam[];
+  stale?: boolean;
+  mock?: boolean;
+}

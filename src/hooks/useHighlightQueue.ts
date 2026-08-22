@@ -20,7 +20,7 @@ export interface QueuedVideo extends HighlightVideo {
  * Neither set is persisted. Per the spec these run on TV browsers with
  * unpredictable storage, so session memory is the only state we trust.
  */
-export function useHighlightQueue(videos: HighlightVideo[], games: Game[]) {
+export function useHighlightQueue(videos: HighlightVideo[], games: Game[], favorites: string[]) {
   const played = useRef<Set<string>>(new Set());
   const rejected = useRef<Set<string>>(new Set());
   const [version, setVersion] = useState(0);
@@ -35,7 +35,7 @@ export function useHighlightQueue(videos: HighlightVideo[], games: Game[]) {
         return {
           ...v,
           game: match?.game ?? null,
-          favorite: match ? isFavorite(match.game) : false,
+          favorite: match ? isFavorite(match.game, favorites) : false,
         };
       });
 
@@ -50,7 +50,7 @@ export function useHighlightQueue(videos: HighlightVideo[], games: Game[]) {
       if (pub !== 0) return pub;
       return b.priority - a.priority;
     });
-  }, [videos, games, version]);
+  }, [videos, games, favorites, version]);
 
   const current = queue[0] ?? null;
 

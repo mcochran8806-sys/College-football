@@ -1,10 +1,10 @@
-import { CLOSE_GAME, FAVORITE_TEAMS } from '../../config';
+import { CLOSE_GAME } from '../../config';
 import { isFavoriteGame } from '../../shared/favorites';
 import type { Game } from '../../shared/types';
 
 /** favorites -> in progress -> upcoming -> final */
-function bucket(game: Game): number {
-  if (isFavoriteGame(game, FAVORITE_TEAMS)) return 0;
+function bucket(game: Game, favorites: string[]): number {
+  if (isFavoriteGame(game, favorites)) return 0;
   if (game.state === 'in') return 1;
   if (game.state === 'pre') return 2;
   return 3;
@@ -20,14 +20,14 @@ export function isCloseAndLate(game: Game): boolean {
   return Math.abs(home - away) <= CLOSE_GAME.margin;
 }
 
-export function isFavorite(game: Game): boolean {
-  return isFavoriteGame(game, FAVORITE_TEAMS);
+export function isFavorite(game: Game, favorites: string[]): boolean {
+  return isFavoriteGame(game, favorites);
 }
 
-export function sortGames(games: Game[]): Game[] {
+export function sortGames(games: Game[], favorites: string[]): Game[] {
   return [...games].sort((a, b) => {
-    const ba = bucket(a);
-    const bb = bucket(b);
+    const ba = bucket(a, favorites);
+    const bb = bucket(b, favorites);
     if (ba !== bb) return ba - bb;
 
     // Within favorites, live games outrank scheduled ones.

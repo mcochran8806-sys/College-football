@@ -1,10 +1,11 @@
 import type { Game } from '../../shared/types';
 import { statusLine } from '../lib/format';
-import { isCloseAndLate, isFavorite } from '../lib/sortGames';
+import { isCloseAndLate } from '../lib/sortGames';
 import TeamRow from './TeamRow';
 
 interface Props {
   game: Game;
+  favorite: boolean;
 }
 
 /** The single line under the scores: down & distance while live, otherwise
@@ -15,9 +16,8 @@ function footnote(game: Game): string {
   return game.note ?? game.venue ?? game.conference ?? '';
 }
 
-export default function GameCard({ game }: Props) {
+export default function GameCard({ game, favorite }: Props) {
   const close = isCloseAndLate(game);
-  const favorite = isFavorite(game);
   const live = game.state === 'in';
   const final = game.state === 'post';
   const redZone = game.situation?.isRedZone === true;

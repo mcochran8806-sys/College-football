@@ -32,8 +32,10 @@ body,
   overflow: hidden;
 }
 
-/* Nobody is holding a mouse. */
-* {
+/* Nobody is holding a mouse — but only on the TV screens. /settings is used
+   on a phone or laptop and needs a normal, interactive cursor. */
+.tv-screen,
+.tv-screen * {
   cursor: none;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
@@ -43,6 +45,15 @@ body,
 .wants-cursor,
 .wants-cursor * {
   cursor: pointer;
+}
+
+body {
+  overflow: hidden;
+}
+
+/* The settings page is an ordinary web page: it scrolls. */
+body:has(.settings-screen) {
+  overflow: auto;
 }
 
 @keyframes score-pulse {

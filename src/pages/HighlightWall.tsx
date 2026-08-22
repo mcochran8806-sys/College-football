@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { INTERVALS } from '../../config';
 import CompactScoreboard from '../components/CompactScoreboard';
 import ScoreCard from '../components/ScoreCard';
 import YouTubeStage from '../components/YouTubeStage';
 import { useBurnInShift } from '../hooks/useBurnInShift';
+import { useFavorites } from '../hooks/useFavorites';
 import { useHighlightQueue } from '../hooks/useHighlightQueue';
 import { usePoll } from '../hooks/usePoll';
 import { useScoreCards } from '../hooks/useScoreCards';
@@ -20,9 +21,11 @@ import { getHighlights, getPlays, getScoreboard } from '../lib/api';
  *      scoreboard, so an empty queue never means a black screen.
  */
 export default function HighlightWall() {
+  const { teams: favorites } = useFavorites();
   const scoreboard = usePoll(getScoreboard, INTERVALS.scoreboardPoll);
   const highlights = usePoll(getHighlights, INTERVALS.highlightsPoll);
-  const plays = usePoll(getPlays, INTERVALS.playsPoll);
+  const loadPlays = useCallback(() => getPlays(favorites), [favorites]);
+  const plays = usePoll(loadPlays, INTERVALS.playsPoll);
 
   const games = useMemo(() => scoreboard.data?.games ?? [], [scoreboard.data]);
   const videos = useMemo(() => highlights.data?.videos ?? [], [highlights.data]);
@@ -30,6 +33,7 @@ export default function HighlightWall() {
   const { current, queueLength, playedCount, markPlayed, markRejected } = useHighlightQueue(
     videos,
     games,
+    favorites,
   );
   const { activeCard, recentCards } = useScoreCards(plays.data);
 
@@ -50,16 +54,16 @@ export default function HighlightWall() {
   const hasVideo = current !== null;
 
   const filler = (() => {
-    if (recentCards.length === 0) return <CompactScoreboard games={games} />;
+    if (recentCards.length === 0) return <CompactScoreboard games={games} favorites={favorites} />;
     // Alternate: scoreboard, card, scoreboard, card…
     const slot = fillerIndex % (recentCards.length + 1);
-    if (slot === 0) return <CompactScoreboard games={games} />;
+    if (slot === 0) return <CompactScoreboard games={games} favorites={favorites} />;
     const play = recentCards[slot - 1];
     return <ScoreCard play={play} game={gameFor(play.gameId)} />;
   })();
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-field-950">
+    <div className="tv-screen relative h-full w-full overflow-hidden bg-field-950">
       <div className="h-full w-full" style={{ transform: shift.transform }}>
         {/* The player stays mounted for the whole session even while a card is
             over it — remounting the iframe per clip leaks memory on TV

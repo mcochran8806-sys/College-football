@@ -9,6 +9,8 @@ interface Props {
   pageCount: number;
   pageIndex: number;
   gameCount: number;
+  favorites: string[];
+  favoritesSource: 'url' | 'storage' | 'config';
 }
 
 export default function ScoreboardHeader({
@@ -19,6 +21,8 @@ export default function ScoreboardHeader({
   pageCount,
   pageIndex,
   gameCount,
+  favorites,
+  favoritesSource,
 }: Props) {
   const freshness =
     secondsSinceUpdate === null ? 'connecting…' : `updated ${secondsSinceUpdate}s ago`;
@@ -34,6 +38,14 @@ export default function ScoreboardHeader({
         <span className="text-lg text-field-500">
           {gameCount} {gameCount === 1 ? 'game' : 'games'}
         </span>
+        {/* Which favorites are live on this screen. Without this you have no
+            way to tell whether a ?favorites= URL actually took effect. */}
+        {favorites.length > 0 && (
+          <span className="max-w-[36rem] truncate text-lg text-field-500">
+            ★ {favorites.join(' · ')}
+            {favoritesSource === 'config' && ' (defaults)'}
+          </span>
+        )}
         {mock && (
           <span className="rounded bg-close/20 px-2 py-0.5 text-sm font-semibold text-close">
             MOCK DATA

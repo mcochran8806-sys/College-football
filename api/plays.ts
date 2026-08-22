@@ -18,11 +18,27 @@ import { cached } from './_lib/cache.js';
 import { extractScoringPlays } from './_lib/espn.js';
 import { fetchEspnJson } from './_lib/http.js';
 import { isMock } from './_lib/mock.js';
-import type { ApiRequest, ApiResponse } from './_lib/types.js';
+import { q, type ApiRequest, type ApiResponse } from './_lib/types.js';
 import { loadScoreboard } from './scoreboard.js';
 
 /** Guard rail: never fan out to more than this many summary calls per pass. */
 const MAX_GAMES = 6;
+
+/**
+ * Favorites arrive from the screen's URL so that the games we poll match what
+ * that screen actually treats as a favorite. Falls back to the config defaults
+ * when the param is absent.
+ */
+function requestedFavorites(req: ApiRequest): string[] {
+  const raw = q(req, 'favorites') ?? q(req, 'f');
+  if (!raw) return FAVORITE_TEAMS;
+  const parsed = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && s.length <= 60)
+    .slice(0, 25);
+  return parsed.length > 0 ? parsed : FAVORITE_TEAMS;
+}
 
 async function playsForGames(games: Game[]): Promise<ScoringPlay[]> {
   const settled = await Promise.allSettled(
@@ -59,13 +75,14 @@ function mockRevealCount(): number {
   return 2 + Math.floor((Date.now() - mockStart) / 45_000);
 }
 
-export default async function handler(_req: ApiRequest, res: ApiResponse): Promise<void> {
+export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 's-maxage=15, stale-while-revalidate=30');
 
   try {
     const board = await loadScoreboard(/^\d{8}$/.test(DEBUG_DATE) ? DEBUG_DATE : null);
-    const targets = favoriteInProgress(board.games, FAVORITE_TEAMS).slice(0, MAX_GAMES);
+    const favorites = requestedFavorites(req);
+    const targets = favoriteInProgress(board.games, favorites).slice(0, MAX_GAMES);
     const polledGameIds = targets.map((g) => g.id);
 
     if (targets.length === 0) {
@@ -99,6 +116,8 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
       return;
     }
 
+    // Keyed on the games actually polled, so two screens with different
+    // favorites can't share each other's feed.
     const key = `plays:${polledGameIds.join(',')}`;
     const result = await cached<ScoringPlay[]>(key, CACHE_TTL.plays, async () =>
       chronological(await playsForGames(targets)),

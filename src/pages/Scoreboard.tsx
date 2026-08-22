@@ -3,9 +3,10 @@ import { GAMES_PER_PAGE, INTERVALS } from '../../config';
 import GameCard from '../components/GameCard';
 import ScoreboardHeader from '../components/ScoreboardHeader';
 import { useBurnInShift } from '../hooks/useBurnInShift';
+import { useFavorites } from '../hooks/useFavorites';
 import { usePoll, useSecondsSince } from '../hooks/usePoll';
 import { getScoreboard } from '../lib/api';
-import { paginate, sortGames } from '../lib/sortGames';
+import { isFavorite, paginate, sortGames } from '../lib/sortGames';
 
 /**
  * Screen 1. Non-interactive, unattended, twelve hours at a stretch.
@@ -17,8 +18,9 @@ export default function Scoreboard() {
   const { data, updatedAt, failures } = usePoll(getScoreboard, INTERVALS.scoreboardPoll);
   const secondsSince = useSecondsSince(updatedAt);
   const shift = useBurnInShift();
+  const { teams: favorites, source: favoritesSource } = useFavorites();
 
-  const games = useMemo(() => sortGames(data?.games ?? []), [data]);
+  const games = useMemo(() => sortGames(data?.games ?? [], favorites), [data, favorites]);
   const pages = useMemo(() => paginate(games, GAMES_PER_PAGE), [games]);
 
   const [pageIndex, setPageIndex] = useState(0);
@@ -48,7 +50,7 @@ export default function Scoreboard() {
   return (
     // 4% padding on every edge. Plenty of TVs overscan and clip whatever is
     // outside that margin — including, on some sets, the entire top row.
-    <div className="h-full w-full p-[4%]">
+    <div className="tv-screen h-full w-full p-[4%]">
       <div
         className="flex h-full w-full flex-col transition-transform duration-1000 ease-in-out"
         style={{ transform: shift.transform }}
@@ -61,6 +63,8 @@ export default function Scoreboard() {
           pageCount={pages.length}
           pageIndex={pageIndex}
           gameCount={games.length}
+          favorites={favorites}
+          favoritesSource={favoritesSource}
         />
 
         {games.length === 0 ? (
@@ -75,7 +79,7 @@ export default function Scoreboard() {
             }
           >
             {page.map((game) => (
-              <GameCard key={game.id} game={game} />
+              <GameCard key={game.id} game={game} favorite={isFavorite(game, favorites)} />
             ))}
           </main>
         )}

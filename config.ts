@@ -8,6 +8,9 @@
  * Teams whose games sort to the top of the scoreboard, get polled for scoring
  * plays, and interrupt the highlight wall with a score card.
  *
+ * These are the DEFAULTS. A ?favorites= parameter in the URL overrides them
+ * per screen — build one at /settings by clicking teams. See README.
+ *
  * Accepts anything the alias table understands: abbreviations ("UGA"), school
  * names ("Georgia Tech"), or nicknames ("Bama"). Matched case-insensitively
  * against ESPN's abbreviation / displayName / shortDisplayName / location.
@@ -97,12 +100,17 @@ export const REQUIRED_TEAM_MATCHES = 2;
  */
 export const DEBUG_DATE = '';
 
+/** Team list cache: FBS membership changes about once a year. */
+export const CACHE_TTL_TEAMS = 86_400_000;
+
 /** ESPN's undocumented, unofficial endpoints. Schema can shift mid-season. */
 export const ESPN = {
   scoreboard:
     'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard',
   summary:
     'https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary',
+  teams:
+    'https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams',
   /** groups=80 is FBS; limit=100 lifts the default ~17-game cap. BOTH required. */
   params: { groups: '80', limit: '100' },
 } as const;

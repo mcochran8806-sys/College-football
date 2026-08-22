@@ -6,6 +6,7 @@ Two unattended TV screens driven by one backend:
 |---|---|---|
 | `/` | Scoreboard TV | Full FBS slate, favorites first, auto-paginating, 20s refresh |
 | `/highlights` | Highlight wall | Auto-rotating YouTube highlights + live scoring-play interstitials |
+| `/settings` | Team picker | Click favorites, get a URL to point each TV at (open on a phone/laptop) |
 
 Vite + React + TypeScript + Tailwind, deployed to Vercel's free tier. The
 browser never talks to ESPN or YouTube directly — everything goes through
@@ -262,6 +263,39 @@ Or just open the URL and press **F11**. Exit kiosk with `Ctrl/Cmd+W`.
 
 ---
 
+## Picking favorite teams
+
+Open **`/settings`** on a phone or laptop (not the TVs — they stay
+non-interactive). Click teams, and the page builds you a URL:
+
+```
+https://cfb-saturday.vercel.app/?f=Georgia,Georgia%20Tech,Alabama
+https://cfb-saturday.vercel.app/highlights?f=Georgia,Georgia%20Tech,Alabama
+```
+
+**That URL is the setting.** Point each TV at it — or bookmark it — and the
+choice sticks. There's no database and nothing to save, which is the point: it
+survives a TV browser clearing its own storage, and the two screens can even
+run different favorites.
+
+Favorites resolve in this order, first match wins:
+
+1. `?favorites=` or the short `?f=` in the URL — the source of truth
+2. `localStorage` — a convenience mirror on that one device, never load-bearing
+3. `FAVORITE_TEAMS` in `config.ts` — the always-present fallback
+
+The scoreboard header lists the active favorites (`* Georgia · Georgia Tech ·
+Alabama`), so you can tell at a glance whether a URL took effect. If it says
+`(defaults)`, the URL didn't parse and you're seeing `config.ts`.
+
+The `?f=` short form exists because typing a URL on a Fire Stick remote is
+miserable. To change the defaults permanently instead, edit `FAVORITE_TEAMS` in
+`config.ts` and push.
+
+Favorites also travel to `/api/plays` as a query param, because that endpoint
+decides which games to poll ESPN for and has to agree with what the screen
+treats as a favorite.
+
 ## Configuration
 
 Everything tunable lives in `config.ts`:
@@ -327,6 +361,11 @@ channels.list      =   1 unit /call  ->  one-time ID resolution, offline script.
 channel ID by changing the second character from `C` to `U` (`UCxxxx` →
 `UUxxxx`), which costs zero API calls. A 403 `quotaExceeded` is logged and the
 cached results are served; the flag clears when the day rolls over.
+
+### `/api/teams`
+
+Full FBS team list for the settings picker, cached 24h — FBS membership
+changes about once a year.
 
 ### `/api/plays`
 
