@@ -11,7 +11,7 @@ import type { PickerTeam } from '../shared/types.js';
 import { cached } from './_lib/cache.js';
 import { fetchEspnJson } from './_lib/http.js';
 import { isMock } from './_lib/mock.js';
-import { q, type ApiRequest, type ApiResponse } from './_lib/types.js';
+import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -64,48 +64,51 @@ export function shrinkTeams(raw: any): PickerTeam[] {
   return out.sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
-/** TEMPORARY probe: what fields does ESPN actually give us, and does any
- *  endpoint variant restrict to FBS? Removed once the filter is settled. */
-async function probe(): Promise<unknown> {
-  const urls: Record<string, string> = {
-    plain: `${ESPN.teams}?limit=1000`,
-    groups80: `${ESPN.teams}?groups=80&limit=1000`,
-    group80: `${ESPN.teams}?group=80&limit=1000`,
-    division: `${ESPN.teams}?division=fbs&limit=1000`,
-    core80:
-      'https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/groups/80/teams?limit=300',
-    standings:
-      'https://site.api.espn.com/apis/v2/sports/football/college-football/standings?level=2',
-  };
-  const out: Record<string, unknown> = {};
-  await Promise.all(
-    Object.entries(urls).map(async ([name, url]) => {
-      try {
-        const raw = await fetchEspnJson<any>(url, 12_000);
-        const teams = extractTeams(raw);
-        out[name] = {
-          count: teams.length || undefined,
-          topKeys: Object.keys(raw ?? {}).slice(0, 10),
-          sampleTeamKeys: teams[0] ? Object.keys(teams[0]?.team ?? teams[0]).slice(0, 40) : null,
-          refCount: Array.isArray(raw?.items) ? raw.items.length : undefined,
-        };
-      } catch (err) {
-        out[name] = { error: String(err).slice(0, 150) };
-      }
-    }),
+/**
+ * FBS membership, via the standings tree.
+ *
+ * The teams endpoint can't do this: it ignores groups=80, group=80 and
+ * division= alike (all four variants return the same 759 teams, down through
+ * Division III), and the team objects carry no conference or division field to
+ * filter on — measured against the live API, not assumed.
+ *
+ * The standings endpoint does return a conference tree, so we walk it for team
+ * ids. Shape is unverified beyond the top level, so the walk is recursive and
+ * tolerant: any node carrying standings.entries[].team contributes.
+ */
+async function fbsTeamIds(): Promise<Set<string>> {
+  const raw = await fetchEspnJson<any>(
+    'https://site.api.espn.com/apis/v2/sports/football/college-football/standings?level=2',
+    12_000,
   );
-  return out;
+
+  const ids = new Set<string>();
+  const visit = (node: any, depth: number): void => {
+    if (!node || typeof node !== 'object' || depth > 6) return;
+    const entries = node?.standings?.entries;
+    if (Array.isArray(entries)) {
+      for (const e of entries) {
+        const id = e?.team?.id;
+        if (id != null) ids.add(String(id));
+      }
+    }
+    if (Array.isArray(node?.children)) {
+      for (const child of node.children) visit(child, depth + 1);
+    }
+  };
+  visit(raw, 0);
+  return ids;
 }
 
-export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
+/** FBS is ~134 schools. Anything far outside this means the shape moved and
+ *  the filter should be ignored rather than trusted. */
+function plausibleFbsCount(n: number): boolean {
+  return n >= 100 && n <= 200;
+}
+
+export default async function handler(_req: ApiRequest, res: ApiResponse): Promise<void> {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
-
-  if (q(req, 'probe') === '1') {
-    res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json(await probe());
-    return;
-  }
 
   try {
     if (isMock()) {
@@ -140,16 +143,35 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     // a scroll past Adams State to find Alabama.
     const url = `${ESPN.teams}?${new URLSearchParams({ groups: '80', limit: '1000' }).toString()}`;
     const result = await cached<PickerTeam[]>('teams:fbs', CACHE_TTL_TEAMS, async () => {
-      const teams = shrinkTeams(await fetchEspnJson<unknown>(url, 12_000));
-      // FBS is ~134 schools. A much larger number means ESPN ignored groups=80
-      // and we're serving every division again — worth a log line, but still
-      // usable, so don't fail the request over it.
-      if (teams.length > 250) {
-        console.warn(`[api/teams] groups=80 appears to have been ignored: ${teams.length} teams`);
+      // The teams list has the good logos and colors; standings has the FBS
+      // membership. Fetch both and intersect.
+      const [all, ids] = await Promise.all([
+        fetchEspnJson<unknown>(url, 12_000).then(shrinkTeams),
+        fbsTeamIds().catch((err) => {
+          console.warn('[api/teams] standings lookup failed, serving unfiltered:', err);
+          return new Set<string>();
+        }),
+      ]);
+
+      if (!plausibleFbsCount(ids.size)) {
+        console.warn(
+          `[api/teams] FBS filter yielded ${ids.size} ids (expected 100-200); ` +
+            `serving all ${all.length} teams unfiltered.`,
+        );
+        return all;
       }
-      return teams;
+
+      const filtered = all.filter((t) => ids.has(t.id));
+      // Don't let an id-format mismatch silently empty the picker.
+      if (!plausibleFbsCount(filtered.length)) {
+        console.warn(
+          `[api/teams] FBS filter matched only ${filtered.length} of ${all.length}; serving unfiltered.`,
+        );
+        return all;
+      }
+      return filtered;
     });
-    res.status(200).json({ teams: result.value, stale: result.stale, count: result.value.length });
+    res.status(200).json({ teams: result.value, count: result.value.length, stale: result.stale });
   } catch (err) {
     console.error('[api/teams] failed:', err);
     res.status(200).json({ teams: [], stale: true });
