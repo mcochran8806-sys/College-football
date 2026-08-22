@@ -1,7 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { WALL } from '../../config';
 import type { Game, HighlightVideo } from '../../shared/types';
-import { cfbRelevance, matchTitleToGame, type Relevance } from '../lib/matchTitle';
+import {
+  cfbRelevance,
+  isHighlightReel,
+  matchTitleToGame,
+  type Relevance,
+} from '../lib/matchTitle';
 import { isFavorite } from '../lib/sortGames';
 
 export interface QueuedVideo extends HighlightVideo {
@@ -9,6 +14,8 @@ export interface QueuedVideo extends HighlightVideo {
   game: Game | null;
   favorite: boolean;
   relevance: Relevance;
+  /** Title looks like a highlight reel rather than an interview or preview. */
+  reel: boolean;
 }
 
 /**
@@ -39,6 +46,7 @@ export function useHighlightQueue(videos: HighlightVideo[], games: Game[], favor
           game: match?.game ?? null,
           favorite: match ? isFavorite(match.game, favorites) : false,
           relevance: match ? 'game' : cfbRelevance(v.title, games),
+          reel: isHighlightReel(v.title),
         };
       })
       // Keep the wall about college football. These channels also cover the
@@ -46,7 +54,11 @@ export function useHighlightQueue(videos: HighlightVideo[], games: Game[], favor
       .filter((v) => {
         if (WALL.filler === 'all') return true;
         if (WALL.filler === 'none') return v.relevance === 'game';
-        return v.relevance !== 'none';
+        if (v.relevance === 'none') return false;
+        // A clip matched to a real game is a highlight by definition; for
+        // everything else, require it to look like a reel rather than talk.
+        if (WALL.filler === 'highlights-only') return v.relevance === 'game' || v.reel;
+        return true;
       });
 
     // Favorites first, then anything matched to a real game, then filler.

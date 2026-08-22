@@ -134,6 +134,8 @@ export interface PickerTeam {
   nickname: string;
   logo: string | null;
   color: string | null;
+  /** Conference name from the standings tree, null when it couldn't be read. */
+  conference: string | null;
 }
 
 export interface TeamsResponse {

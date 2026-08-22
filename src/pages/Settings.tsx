@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PickerTeam } from '../../shared/types';
 import { usePoll } from '../hooks/usePoll';
 import { getTeams } from '../lib/api';
@@ -67,6 +67,49 @@ export default function Settings() {
         .some((f) => normalizeText(f ?? '').includes(q)),
     );
   }, [teams, filter]);
+
+  /**
+   * Group by conference. 138 teams in one alphabetical run means hunting for
+   * Georgia somewhere between Fresno State and Hawai'i; grouped, you go
+   * straight to the SEC. Teams whose conference couldn't be read fall into a
+   * trailing "Other" group rather than disappearing.
+   */
+  const groups = useMemo(() => {
+    const byConference = new Map<string, PickerTeam[]>();
+    for (const team of visible) {
+      const key = team.conference ?? 'Other';
+      const list = byConference.get(key);
+      if (list) list.push(team);
+      else byConference.set(key, [team]);
+    }
+    return [...byConference.entries()]
+      .map(([name, list]) => ({ name, teams: list }))
+      .sort((a, b) => {
+        if (a.name === 'Other') return 1;
+        if (b.name === 'Other') return -1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [visible]);
+
+  const filterRef = useRef<HTMLInputElement | null>(null);
+
+  // Land in the filter box so you can start typing a team name immediately.
+  useEffect(() => {
+    filterRef.current?.focus();
+  }, []);
+
+  function onFilterKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Escape') {
+      setFilter('');
+      return;
+    }
+    // Enter picks the single obvious result, so "geo tech" + Enter just works.
+    if (e.key === 'Enter' && visible.length > 0) {
+      e.preventDefault();
+      toggle(visible[0]);
+      setFilter('');
+    }
+  }
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const param = favoritesParam(selected);
@@ -147,10 +190,12 @@ export default function Settings() {
 
         <section className="pt-8">
           <input
+            ref={filterRef}
             type="search"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter teams — name, nickname, or abbreviation"
+            onKeyDown={onFilterKeyDown}
+            placeholder="Type a team name, then press Enter — Esc clears"
             className="w-full rounded-xl border border-field-700 bg-field-900 px-5 py-4 text-xl text-field-100 outline-none placeholder:text-field-500 focus:border-field-500"
           />
 
@@ -165,39 +210,64 @@ export default function Settings() {
             {data?.mock && <span className="text-close">MOCK DATA</span>}
           </div>
 
-          <div className="grid grid-cols-2 gap-2 pt-4 sm:grid-cols-3 lg:grid-cols-4">
-            {visible.map((team) => {
-              const on = isSelected(team);
-              return (
-                <button
-                  key={team.id}
-                  onClick={() => toggle(team)}
-                  className={
-                    'flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ' +
-                    (on
-                      ? 'border-close bg-close/15'
-                      : 'border-field-800 bg-field-900 hover:border-field-700 hover:bg-field-850')
-                  }
+          {/* Jump links — one click to any conference instead of scrolling. */}
+          {!filter && groups.length > 1 && (
+            <div className="flex flex-wrap gap-2 pt-4">
+              {groups.map((g) => (
+                <a
+                  key={g.name}
+                  href={`#conf-${encodeURIComponent(g.name)}`}
+                  className="rounded-full border border-field-800 px-3 py-1 text-base text-field-300 hover:border-field-500 hover:bg-field-850"
                 >
-                  {team.logo && (
-                    <img
-                      src={team.logo}
-                      alt=""
-                      className="h-9 w-9 shrink-0 object-contain"
-                      onError={(e) => {
-                        e.currentTarget.style.visibility = 'hidden';
-                      }}
-                    />
-                  )}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-lg font-semibold">{team.location}</span>
-                    <span className="block truncate text-sm text-field-500">{team.nickname}</span>
-                  </span>
-                  {on && <span className="shrink-0 text-xl text-close">✓</span>}
-                </button>
-              );
-            })}
-          </div>
+                  {g.name}
+                  <span className="pl-1.5 text-field-500">{g.teams.length}</span>
+                </a>
+              ))}
+            </div>
+          )}
+
+          {groups.map((group) => (
+            <section key={group.name} id={`conf-${encodeURIComponent(group.name)}`} className="pt-8">
+              <h3 className="pb-3 text-xl font-semibold uppercase tracking-[0.15em] text-field-500">
+                {group.name}
+              </h3>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                {group.teams.map((team) => {
+                  const on = isSelected(team);
+                  return (
+                    <button
+                      key={team.id}
+                      onClick={() => toggle(team)}
+                      aria-pressed={on}
+                      className={
+                        'flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ' +
+                        'focus:outline-none focus-visible:ring-2 focus-visible:ring-close ' +
+                        (on
+                          ? 'border-close bg-close/15'
+                          : 'border-field-800 bg-field-900 hover:border-field-700 hover:bg-field-850')
+                      }
+                    >
+                      {team.logo && (
+                        <img
+                          src={team.logo}
+                          alt=""
+                          className="h-9 w-9 shrink-0 object-contain"
+                          onError={(e) => {
+                            e.currentTarget.style.visibility = 'hidden';
+                          }}
+                        />
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-lg font-semibold">{team.location}</span>
+                        <span className="block truncate text-sm text-field-500">{team.nickname}</span>
+                      </span>
+                      {on && <span className="shrink-0 text-xl text-close">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </section>
 
         <footer className="py-10 text-base leading-relaxed text-field-500">

@@ -174,15 +174,21 @@ export const REQUIRED_TEAM_MATCHES = 2;
  * Little League, golf. Without a relevance gate the wall plays all of it.
  *
  * filler: what may play when no clip matches one of today's games.
- *   'cfb-only' clips naming an FBS team or a college football topic
- *   'none'     matched games only; otherwise score cards and the scoreboard
- *   'all'      anything the channels post
+ *   'highlights-only' college football AND looks like a highlight reel.
+ *                     Rejects interviews, previews, press conferences and
+ *                     talk shows. In the offseason almost nothing qualifies,
+ *                     so the wall runs on score cards — which is correct:
+ *                     there are no highlights because there are no games.
+ *   'cfb-only'        anything naming an FBS team or a CFB topic, including
+ *                     fall camp features and studio talk
+ *   'none'            matched games only
+ *   'all'             anything the channels post
  *
  * minDurationSeconds drops Shorts, which are vertical, ~15s, and look wrong
  * on a 65" screen. Costs 1 extra quota unit per 50 videos checked.
  */
 export const WALL = {
-  filler: 'cfb-only' as 'cfb-only' | 'none' | 'all',
+  filler: 'highlights-only' as 'highlights-only' | 'cfb-only' | 'none' | 'all',
   minDurationSeconds: 75,
 } as const;
 

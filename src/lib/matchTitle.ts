@@ -299,3 +299,76 @@ export function cfbRelevance(title: string, games: Game[]): Relevance {
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+
+/**
+ * Does this title look like an actual highlight reel, rather than talk?
+ *
+ * "2026 Northwestern Fall Training Camp: David Braun Enters his Fourth Season"
+ * is unambiguously college football and unambiguously not a highlight. The
+ * relevance gate can't tell those apart — this can.
+ *
+ * Negative markers win: "Georgia vs Alabama Press Conference" is not a reel
+ * however much it looks like a game title.
+ */
+const REEL_MARKERS = [
+  'highlights',
+  'highlight',
+  'top plays',
+  'best plays',
+  'best of',
+  'condensed game',
+  'condensed',
+  'full game',
+  'game recap',
+  'every touchdown',
+  'all touchdowns',
+  'top 10 plays',
+  'top ten plays',
+  'instant classic',
+  'final drive',
+  'game winner',
+  'walk off',
+];
+
+const NOT_A_REEL = [
+  'press conference',
+  'interview',
+  'training camp',
+  'fall camp',
+  'spring camp',
+  'media day',
+  'media days',
+  'podcast',
+  'preview',
+  'predictions',
+  'preseason',
+  'analysis',
+  'breakdown',
+  'roundtable',
+  'mailbag',
+  'first take',
+  'get up',
+  'mcafee',
+  'gameday',
+  'hour 1',
+  'hour 2',
+  'hour 3',
+  'hour 4',
+  'storylines',
+  'why ',
+  'what to know',
+  'depth chart',
+  'signing',
+  'commits',
+  'transfer portal',
+];
+
+const REEL_RE = new RegExp(`\\b(?:${REEL_MARKERS.join('|')})\\b`, 'i');
+const NOT_REEL_RE = new RegExp(`(?:${NOT_A_REEL.join('|')})`, 'i');
+
+export function isHighlightReel(title: string): boolean {
+  const normalized = normalizeText(title);
+  if (NOT_REEL_RE.test(normalized)) return false;
+  return REEL_RE.test(normalized);
+}

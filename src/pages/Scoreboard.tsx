@@ -56,7 +56,7 @@ export default function Scoreboard() {
   return (
     // 4% padding on every edge. Plenty of TVs overscan and clip whatever is
     // outside that margin — including, on some sets, the entire top row.
-    <div className="tv-screen h-full w-full p-[4%]">
+    <div className="tv-screen w-full p-[4%]">
       <div
         className="flex h-full w-full flex-col transition-transform duration-1000 ease-in-out"
         style={{ transform: shift.transform }}

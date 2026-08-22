@@ -63,7 +63,7 @@ export default function HighlightWall() {
   })();
 
   return (
-    <div className="tv-screen relative h-full w-full overflow-hidden bg-field-950">
+    <div className="tv-screen relative w-full bg-field-950">
       <div className="h-full w-full" style={{ transform: shift.transform }}>
         {/* The player stays mounted for the whole session even while a card is
             over it — remounting the iframe per clip leaks memory on TV

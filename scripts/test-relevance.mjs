@@ -13,7 +13,7 @@
 import { createServer } from 'vite';
 
 const server = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
-const { cfbRelevance, matchTitleToGame, isNonCfbContent } = await server.ssrLoadModule('/src/lib/matchTitle.ts');
+const { cfbRelevance, matchTitleToGame, isNonCfbContent, isHighlightReel } = await server.ssrLoadModule('/src/lib/matchTitle.ts');
 const { shrinkScoreboard } = await server.ssrLoadModule('/api/_lib/espn.ts');
 const { MOCK_SCOREBOARD } = await server.ssrLoadModule('/fixtures/scoreboard.ts');
 const games = shrinkScoreboard(MOCK_SCOREBOARD);
@@ -55,6 +55,31 @@ for (const [title, want] of cases) {
     console.log(`        nonCfb=${isNonCfbContent(title)} gameMatch=${!!matchTitleToGame(title, games)}`);
   }
 }
+// --- isHighlightReel: an actual reel vs college football talk -------------
+console.log('\n--- highlight-reel detection (WALL.filler = highlights-only) ---');
+const reelCases = [
+  ['#2 Georgia vs #8 Alabama | Full Game Highlights', true],
+  ['Georgia Tech vs Clemson Extended Highlights | ACC Football', true],
+  ['Top 10 Plays of College Football Week 11', true],
+  ['Ole Miss at LSU | Condensed Game', true],
+  // real titles from the live feed that are CFB but are NOT highlights
+  ['2026 Northwestern Fall Training Camp: David Braun Enters his Fourth Season', false],
+  ['Ohio State Preseason No. 1, Ryan Day\u2019s Coaching Success, and Fall Camp Storylines | B1G Today', false],
+  ['Marcus Spears has his LSU Tigers going a PERFECT 12-0 | First Take', false],
+  ['2026 Mountain West Preseason Top Five Wide Receivers', false],
+  ['Hour 4: Last Friday without Football', false],
+  ['Mario Cristobal on Malachi Toney | The Pat McAfee Show', false],
+  ['Marcus Freeman gives Notre Dame\u2019s stance on the transfer portal', false],
+  // negative markers must beat positive ones
+  ['Georgia vs Alabama Press Conference Highlights', false],
+];
+for (const [title, want] of reelCases) {
+  const got = isHighlightReel(title);
+  const ok = got === want;
+  ok ? pass++ : fail++;
+  console.log(`${ok ? 'PASS' : 'FAIL'}  reel=${String(got).padEnd(5)} want=${String(want).padEnd(5)} ${JSON.stringify(title).slice(0, 62)}`);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 await server.close();
 process.exit(fail ? 1 : 0);

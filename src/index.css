@@ -21,14 +21,27 @@
 html,
 body,
 #root {
-  height: 100%;
   margin: 0;
+  min-height: 100%;
   background: var(--color-field-950);
   color: var(--color-field-100);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   /* Tabular figures keep scores from jittering as digits change. */
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Scroll locking belongs to the TV screens, not the document.
+ *
+ * These were previously height:100% + overflow:hidden on html, body AND #root,
+ * which meant /settings — an ordinary page a person reads on a laptop — could
+ * not scroll at all. Anything past the fold was unreachable. The TV pages own
+ * their own viewport instead, so every other route behaves like a normal page.
+ */
+.tv-screen {
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -47,13 +60,9 @@ body,
   cursor: pointer;
 }
 
-body {
-  overflow: hidden;
-}
-
-/* The settings page is an ordinary web page: it scrolls. */
-body:has(.settings-screen) {
-  overflow: auto;
+/* Give the sticky summary bar room to land against. */
+.settings-screen {
+  scroll-behavior: smooth;
 }
 
 @keyframes score-pulse {

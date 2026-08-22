@@ -55,6 +55,7 @@ export function shrinkTeams(raw: any): PickerTeam[] {
           (typeof t?.logos?.[0]?.href === 'string' ? t.logos[0].href : null) ??
           `https://a.espncdn.com/i/teamlogos/ncaa/500/${id}.png`,
         color: typeof t?.color === 'string' ? `#${t.color.replace(/^#/, '')}` : null,
+        conference: null,
       });
     } catch (err) {
       console.error('[api/teams] skipped malformed team:', err);
@@ -76,27 +77,35 @@ export function shrinkTeams(raw: any): PickerTeam[] {
  * ids. Shape is unverified beyond the top level, so the walk is recursive and
  * tolerant: any node carrying standings.entries[].team contributes.
  */
-async function fbsTeamIds(): Promise<Set<string>> {
+async function fbsTeamIds(): Promise<Map<string, string | null>> {
   const raw = await fetchEspnJson<any>(
     'https://site.api.espn.com/apis/v2/sports/football/college-football/standings?level=2',
     12_000,
   );
 
-  const ids = new Set<string>();
-  const visit = (node: any, depth: number): void => {
+  // id -> conference name. Keeps the OUTERMOST conference, so a team in a
+  // divisioned conference groups under "ACC" rather than "ACC Atlantic".
+  const ids = new Map<string, string | null>();
+
+  const visit = (node: any, depth: number, conference: string | null): void => {
     if (!node || typeof node !== 'object' || depth > 6) return;
+
+    const name = typeof node?.name === 'string' ? node.name : null;
+    const conf = conference ?? (node?.isConference === true && name ? name : null);
+
     const entries = node?.standings?.entries;
     if (Array.isArray(entries)) {
       for (const e of entries) {
         const id = e?.team?.id;
-        if (id != null) ids.add(String(id));
+        if (id != null) ids.set(String(id), conf ?? name);
       }
     }
     if (Array.isArray(node?.children)) {
-      for (const child of node.children) visit(child, depth + 1);
+      for (const child of node.children) visit(child, depth + 1, conf);
     }
   };
-  visit(raw, 0);
+
+  visit(raw, 0, null);
   return ids;
 }
 
@@ -128,6 +137,7 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
             nickname: t.name,
             logo: t.logo,
             color: `#${String(t.color).replace(/^#/, '')}`,
+            conference: null,
           });
         }
       }
@@ -149,7 +159,7 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
         fetchEspnJson<unknown>(url, 12_000).then(shrinkTeams),
         fbsTeamIds().catch((err) => {
           console.warn('[api/teams] standings lookup failed, serving unfiltered:', err);
-          return new Set<string>();
+          return new Map<string, string | null>();
         }),
       ]);
 
@@ -161,7 +171,9 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
         return all;
       }
 
-      const filtered = all.filter((t) => ids.has(t.id));
+      const filtered = all
+        .filter((t) => ids.has(t.id))
+        .map((t) => ({ ...t, conference: ids.get(t.id) ?? null }));
       // Don't let an id-format mismatch silently empty the picker.
       if (!plausibleFbsCount(filtered.length)) {
         console.warn(
