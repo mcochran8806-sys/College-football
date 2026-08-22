@@ -11,7 +11,7 @@ import type { PickerTeam } from '../shared/types.js';
 import { cached } from './_lib/cache.js';
 import { fetchEspnJson } from './_lib/http.js';
 import { isMock } from './_lib/mock.js';
-import type { ApiRequest, ApiResponse } from './_lib/types.js';
+import { q, type ApiRequest, type ApiResponse } from './_lib/types.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -64,9 +64,48 @@ export function shrinkTeams(raw: any): PickerTeam[] {
   return out.sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
-export default async function handler(_req: ApiRequest, res: ApiResponse): Promise<void> {
+/** TEMPORARY probe: what fields does ESPN actually give us, and does any
+ *  endpoint variant restrict to FBS? Removed once the filter is settled. */
+async function probe(): Promise<unknown> {
+  const urls: Record<string, string> = {
+    plain: `${ESPN.teams}?limit=1000`,
+    groups80: `${ESPN.teams}?groups=80&limit=1000`,
+    group80: `${ESPN.teams}?group=80&limit=1000`,
+    division: `${ESPN.teams}?division=fbs&limit=1000`,
+    core80:
+      'https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/groups/80/teams?limit=300',
+    standings:
+      'https://site.api.espn.com/apis/v2/sports/football/college-football/standings?level=2',
+  };
+  const out: Record<string, unknown> = {};
+  await Promise.all(
+    Object.entries(urls).map(async ([name, url]) => {
+      try {
+        const raw = await fetchEspnJson<any>(url, 12_000);
+        const teams = extractTeams(raw);
+        out[name] = {
+          count: teams.length || undefined,
+          topKeys: Object.keys(raw ?? {}).slice(0, 10),
+          sampleTeamKeys: teams[0] ? Object.keys(teams[0]?.team ?? teams[0]).slice(0, 40) : null,
+          refCount: Array.isArray(raw?.items) ? raw.items.length : undefined,
+        };
+      } catch (err) {
+        out[name] = { error: String(err).slice(0, 150) };
+      }
+    }),
+  );
+  return out;
+}
+
+export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
+
+  if (q(req, 'probe') === '1') {
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).json(await probe());
+    return;
+  }
 
   try {
     if (isMock()) {
