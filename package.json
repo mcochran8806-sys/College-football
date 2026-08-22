@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "resolve-channels": "node scripts/resolve-channels.mjs",
-    "test:matcher": "node scripts/test-matcher.mjs"
+    "test:matcher": "node scripts/test-matcher.mjs",
+    "test:relevance": "node scripts/test-relevance.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

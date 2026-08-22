@@ -76,6 +76,8 @@ export interface HighlightVideo {
   channelName: string;
   thumbnail: string | null;
   priority: number;
+  /** Null when the duration lookup failed; the clip is kept either way. */
+  durationSeconds: number | null;
 }
 
 export interface HighlightsResponse {

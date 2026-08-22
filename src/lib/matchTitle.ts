@@ -48,6 +48,69 @@ const NOISE = [
 
 const NOISE_RE = new RegExp(`\\b(?:${NOISE.join('|')})\\b`, 'gi');
 
+/**
+ * Titles that are NOT college football, however much they look like it.
+ *
+ * This is not a nicety — it prevents wrong clips being labelled as your game.
+ * These channels post every sport they cover, and the collisions are real:
+ *
+ *   "Washington vs. Texas | Full Game Highlights | Little League World Series"
+ *   "SEC MBB Tourney Championship Texas A&M vs. Alabama | Game Highlights"
+ *
+ * Both name two FBS schools and say "Highlights". Without this list the wall
+ * would show Little League baseball captioned as a college football game.
+ * Checked before any team matching happens.
+ */
+const NOT_CFB = [
+  // other sports
+  'little league',
+  'world series',
+  'wbb',
+  'mbb',
+  'basketball',
+  'volleyball',
+  'soccer',
+  'baseball',
+  'softball',
+  'lacrosse',
+  'hockey',
+  'golf',
+  'tennis',
+  'gymnastics',
+  'track and field',
+  'swimming',
+  'wrestling',
+  'rowing',
+  'cross country',
+  // other leagues
+  'nba',
+  'wnba',
+  'nfl',
+  'mlb',
+  'nhl',
+  'mls',
+  'premier league',
+  'ufc',
+  'nascar',
+  'formula 1',
+  'liv',
+  // adjacent-but-not-a-game
+  'fantasy football',
+  'mock draft',
+  'nfl draft',
+  'combine',
+];
+
+const NOT_CFB_RE = new RegExp(`\\b(?:${NOT_CFB.join('|')})\\b`, 'i');
+
+/**
+ * True when a title is about something other than college football.
+ * Runs on the normalized title so punctuation and emoji can't hide a keyword.
+ */
+export function isNonCfbContent(title: string): boolean {
+  return NOT_CFB_RE.test(normalizeText(title));
+}
+
 /** Normalize + strip the boilerplate every network writes differently. */
 export function normalizeTitle(title: string): string {
   return normalizeText(title).replace(NOISE_RE, ' ').replace(/\s+/g, ' ').trim();
@@ -108,6 +171,10 @@ export interface TitleMatch {
  * Best game match for a title, or null when nothing clears the bar.
  */
 export function matchTitleToGame(title: string, games: Game[]): TitleMatch | null {
+  // A basketball or Little League title naming two FBS schools must never be
+  // matched to a football game.
+  if (isNonCfbContent(title)) return null;
+
   const normalized = normalizeTitle(title);
   if (!normalized) return null;
 
@@ -154,4 +221,81 @@ export function matchTitleToGame(title: string, games: Game[]): TitleMatch | nul
   }
 
   return best;
+}
+
+
+/**
+ * How relevant is this clip to college football at all?
+ *
+ *   'game'  matched two teams from one of today's games
+ *   'team'  names at least one FBS team playing this week
+ *   'topic' mentions college football generally (conference, CFB, NCAA)
+ *   'none'  unrelated — NBA trades, fantasy advice, Little League
+ *
+ * The wall uses this to decide what may play as filler between real game
+ * highlights. Without it, "Klay Thompson expected to sign with the Heat" is a
+ * perfectly valid clip to show on a college football wall.
+ */
+export type Relevance = 'game' | 'team' | 'topic' | 'none';
+
+const CFB_TOPICS = [
+  'college football',
+  'cfb',
+  'ncaa football',
+  'ncaaf',
+  'sec',
+  'big ten',
+  'b1g',
+  'big 12',
+  'acc',
+  'pac 12',
+  'mountain west',
+  'sun belt',
+  'american athletic',
+  'conference usa',
+  'mac',
+  'bowl game',
+  'heisman',
+  'college gameday',
+  'spring game',
+  'fall camp',
+  'training camp',
+  'signing day',
+  'recruiting',
+  'playoff',
+];
+
+const CFB_TOPIC_RE = new RegExp(`\\b(?:${CFB_TOPICS.join('|')})\\b`, 'i');
+
+export function cfbRelevance(title: string, games: Game[]): Relevance {
+  if (isNonCfbContent(title)) return 'none';
+
+  if (matchTitleToGame(title, games)) return 'game';
+
+  // Deliberately normalizeText, NOT normalizeTitle. normalizeTitle strips
+  // "college football", "cfb" and "ncaaf" as boilerplate — useful when
+  // isolating team names, fatal here, because those are exactly the words that
+  // prove a clip belongs on this wall.
+  const normalized = normalizeText(title);
+  if (!normalized) return 'none';
+
+  // One team name is not enough to call it a game, but it is plenty to call it
+  // college football — a fall camp piece on Northwestern belongs on this wall.
+  for (const game of games) {
+    for (const side of ['home', 'away'] as const) {
+      const team = game[side];
+      for (const form of [team.location, team.displayName, team.shortDisplayName]) {
+        const n = normalizeText(form ?? '');
+        if (n.length >= MIN_ALIAS_LENGTH && new RegExp(`\\b${escapeRe(n)}\\b`).test(normalized)) {
+          return 'team';
+        }
+      }
+    }
+  }
+
+  return CFB_TOPIC_RE.test(normalized) ? 'topic' : 'none';
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

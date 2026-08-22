@@ -28,7 +28,7 @@
  * ==========================================================================
  */
 
-import { HIGHLIGHT_CHANNELS, type HighlightChannel } from '../../config.js';
+import { HIGHLIGHT_CHANNELS, WALL, type HighlightChannel } from '../../config.js';
 import type { HighlightVideo } from '../../shared/types.js';
 import { fetchJson, redact, UpstreamError } from './http.js';
 
@@ -123,10 +123,55 @@ function parseItems(raw: any, channel: HighlightChannel): HighlightVideo[] {
         snippet?.thumbnails?.default?.url ??
         `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
       priority: channel.priority ?? 1,
+      durationSeconds: null,
     });
   }
 
   return out;
+}
+
+/** PT1H2M3S -> seconds. Returns null for anything unparseable. */
+export function parseIsoDuration(iso: unknown): number | null {
+  if (typeof iso !== 'string') return null;
+  const m = /^P(?:([\d.]+)D)?T?(?:([\d.]+)H)?(?:([\d.]+)M)?(?:([\d.]+)S)?$/.exec(iso);
+  if (!m) return null;
+  const [, d, h, min, sec] = m;
+  const total =
+    (Number(d) || 0) * 86400 +
+    (Number(h) || 0) * 3600 +
+    (Number(min) || 0) * 60 +
+    (Number(sec) || 0);
+  return Number.isFinite(total) && total > 0 ? total : null;
+}
+
+/**
+ * Fill in durations so Shorts can be dropped.
+ *
+ * videos.list accepts up to 50 ids per call and still costs 1 unit, so the
+ * whole batch is typically 1-2 units on top of the 11 for the playlists.
+ * A failure here is non-fatal: durations stay null and nothing gets filtered,
+ * which is better than an empty wall.
+ */
+async function attachDurations(videos: HighlightVideo[], apiKey: string): Promise<void> {
+  for (let i = 0; i < videos.length; i += 50) {
+    const batch = videos.slice(i, i + 50);
+    try {
+      const url =
+        `${API}/videos?part=contentDetails` +
+        `&id=${batch.map((v) => encodeURIComponent(v.videoId)).join(',')}` +
+        `&key=${encodeURIComponent(apiKey)}`;
+      const raw = await fetchJson<any>(url);
+      const byId = new Map<string, number | null>();
+      for (const item of Array.isArray(raw?.items) ? raw.items : []) {
+        if (typeof item?.id === 'string') {
+          byId.set(item.id, parseIsoDuration(item?.contentDetails?.duration));
+        }
+      }
+      for (const v of batch) v.durationSeconds = byId.get(v.videoId) ?? null;
+    } catch (err) {
+      console.error('[youtube] duration lookup failed for a batch:', redact(String(err)));
+    }
+  }
 }
 
 export interface FetchHighlightsResult {
@@ -209,8 +254,20 @@ export async function fetchHighlights(apiKey: string): Promise<FetchHighlightsRe
       return true;
     });
 
+  await attachDurations(videos, apiKey);
+
+  // Drop Shorts. A 15-second vertical clip on a 65" screen is worse than
+  // nothing. Unknown durations are kept — never filter on missing data.
+  const longEnough = videos.filter(
+    (v) => v.durationSeconds === null || v.durationSeconds >= WALL.minDurationSeconds,
+  );
+  const dropped = videos.length - longEnough.length;
+  if (dropped > 0) {
+    console.log(`[youtube] dropped ${dropped} clip(s) under ${WALL.minDurationSeconds}s`);
+  }
+
   // Advance the per-channel watermark so a later pass can tell what's new.
-  for (const v of videos) {
+  for (const v of longEnough) {
     const prev = watermarks.get(v.channelId);
     if (!prev || Date.parse(v.publishedAt) > Date.parse(prev)) {
       watermarks.set(v.channelId, v.publishedAt);
@@ -218,7 +275,7 @@ export async function fetchHighlights(apiKey: string): Promise<FetchHighlightsRe
   }
 
   return {
-    videos,
+    videos: longEnough,
     unresolvedChannels: unresolved,
     quotaExhausted: sawQuotaError || isQuotaExhausted(),
   };

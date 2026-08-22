@@ -168,6 +168,25 @@ export const CLOSE_GAME = { period: 4, margin: 8 } as const;
 export const REQUIRED_TEAM_MATCHES = 2;
 
 /**
+ * Highlight wall behavior.
+ *
+ * These channels post everything they cover — NBA trades, fantasy football,
+ * Little League, golf. Without a relevance gate the wall plays all of it.
+ *
+ * filler: what may play when no clip matches one of today's games.
+ *   'cfb-only' clips naming an FBS team or a college football topic
+ *   'none'     matched games only; otherwise score cards and the scoreboard
+ *   'all'      anything the channels post
+ *
+ * minDurationSeconds drops Shorts, which are vertical, ~15s, and look wrong
+ * on a 65" screen. Costs 1 extra quota unit per 50 videos checked.
+ */
+export const WALL = {
+  filler: 'cfb-only' as 'cfb-only' | 'none' | 'all',
+  minDurationSeconds: 75,
+} as const;
+
+/**
  * Debug only. Leave empty. When set to YYYYMMDD the API functions will request
  * that slate from ESPN instead of today's. The TVs never send this.
  */

@@ -30,6 +30,7 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
         channelName: it.snippet.channelTitle,
         thumbnail: it.snippet.thumbnails?.medium?.url ?? null,
         priority: 3 - Math.floor(i / 4),
+        durationSeconds: 240,
       })),
       fetchedAt: new Date().toISOString(),
       stale: false,

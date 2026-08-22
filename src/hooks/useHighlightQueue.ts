@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { WALL } from '../../config';
 import type { Game, HighlightVideo } from '../../shared/types';
-import { matchTitleToGame } from '../lib/matchTitle';
+import { cfbRelevance, matchTitleToGame, type Relevance } from '../lib/matchTitle';
 import { isFavorite } from '../lib/sortGames';
 
 export interface QueuedVideo extends HighlightVideo {
   /** The game this clip was matched to, when the title cleared the bar. */
   game: Game | null;
   favorite: boolean;
+  relevance: Relevance;
 }
 
 /**
@@ -36,12 +38,23 @@ export function useHighlightQueue(videos: HighlightVideo[], games: Game[], favor
           ...v,
           game: match?.game ?? null,
           favorite: match ? isFavorite(match.game, favorites) : false,
+          relevance: match ? 'game' : cfbRelevance(v.title, games),
         };
+      })
+      // Keep the wall about college football. These channels also cover the
+      // NBA, fantasy leagues and Little League; none of that belongs here.
+      .filter((v) => {
+        if (WALL.filler === 'all') return true;
+        if (WALL.filler === 'none') return v.relevance === 'game';
+        return v.relevance !== 'none';
       });
 
     // Favorites first, then anything matched to a real game, then filler.
     // Within a tier: newest upload, then the channel we trust most.
-    const tier = (v: QueuedVideo) => (v.favorite ? 0 : v.game ? 1 : 2);
+    // Favorites, then any real game, then a clip about a team, then general
+    // college football talk.
+    const tier = (v: QueuedVideo) =>
+      v.favorite ? 0 : v.game ? 1 : v.relevance === 'team' ? 2 : 3;
     return annotated.sort((a, b) => {
       const ta = tier(a);
       const tb = tier(b);
@@ -68,6 +81,7 @@ export function useHighlightQueue(videos: HighlightVideo[], games: Game[], favor
   return {
     current,
     upNext: queue.slice(1, 4),
+    matchedCount: queue.filter((v) => v.game).length,
     queueLength: queue.length,
     playedCount: played.current.size,
     rejectedCount: rejected.current.size,

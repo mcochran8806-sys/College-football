@@ -419,6 +419,42 @@ the fiddliest part of the app. `src/lib/matchTitle.ts`:
 Tokens that map to more than one FBS program (`osu`, `msu`, `isu`, bare
 `miami`, …) are in `AMBIGUOUS_TOKENS` and never match alone.
 
+**Non-football titles are rejected before any matching happens.** These
+channels post every sport they cover, and the collisions are real — both of
+these appeared in one live payload:
+
+```
+"Washington vs. Texas | Full Game Highlights | Little League World Series"
+"SEC MBB Tourney Championship Texas A&M vs. Alabama | Game Highlights"
+```
+
+Each names two FBS schools and says "Highlights". Without the `NOT_CFB` list
+the wall would caption Little League baseball as your Texas game.
+
+### Wall relevance
+
+`WALL.filler` in `config.ts` decides what may play between real game
+highlights, scored by `cfbRelevance()`:
+
+| Score | Meaning | Example |
+|---|---|---|
+| `game` | Two teams from one of today's games | "Georgia vs Alabama Highlights" |
+| `team` | Names an FBS team playing this week | "Ohio State Fall Camp Storylines" |
+| `topic` | College football generally | "Mountain West Preseason Top Five WRs" |
+| `none` | Unrelated — rejected | "DeMar DeRozan agrees to 1-year deal" |
+
+`'cfb-only'` (default) keeps everything except `none`. `'none'` plays only
+matched games and falls back to score cards otherwise. `'all'` disables the
+gate.
+
+Clips shorter than `WALL.minDurationSeconds` (75s) are dropped server-side —
+Shorts are vertical and ~15s, and look wrong on a 65" screen. Durations come
+from `videos.list`, which takes 50 ids per call for 1 unit. An unknown
+duration is never filtered.
+
+Run `npm run test:relevance` after editing either list; its cases are real
+titles pulled from a live payload.
+
 Run `npm run test:matcher` after editing the alias table — it exercises the
 real matcher against the fixture slate, including the negative cases.
 
