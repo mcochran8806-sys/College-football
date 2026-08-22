@@ -100,10 +100,17 @@ Or from a local checkout:
 npm run resolve-channels
 ```
 
-It looks each `@handle` up via `channels.list?forHandle` (1 quota unit each,
-~12 units total, never called from a request path) and prints paste-ready
-config lines. Channels still marked `TODO_VERIFY` are skipped at runtime with a
-warning in the function logs.
+Each channel carries a list of **candidate handles**, tried in order until one
+resolves. Networks rename their channels and the obvious handle is often wrong
+— `@SECNetwork` and `@bigtennetwork` both 404 — so rather than guessing one
+spelling, the YouTube API arbitrates a short list. `channels.list?forHandle`
+costs 1 unit per handle actually tried (~33 units for a full run), and it is
+never called from a request path.
+
+Channels still marked `TODO_VERIFY` are skipped at runtime with a warning in
+the function logs, and a failed lookup never overwrites an id that already
+resolved. If none of a channel's candidates exist, find it on youtube.com and
+use **Share channel → Copy channel ID**.
 
 ---
 

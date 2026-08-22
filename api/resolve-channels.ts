@@ -23,36 +23,65 @@ import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
 interface Resolved {
   name: string;
-  handle: string;
+  /** Every handle we tried, in order. */
+  tried: string[];
+  /** The one that worked. */
+  matched: string | null;
   configured: string;
   resolved: string | null;
   title: string | null;
   error: string | null;
+  /** Quota units spent on this channel — one per handle tried. */
+  units: number;
 }
 
+async function lookup(handle: string, apiKey: string): Promise<{ id: string; title: string | null } | null> {
+  const url =
+    'https://www.googleapis.com/youtube/v3/channels' +
+    `?part=id,snippet&forHandle=${encodeURIComponent(handle)}` +
+    `&key=${encodeURIComponent(apiKey)}`;
+  const raw = await fetchJson<any>(url, 10_000);
+  const item = raw?.items?.[0];
+  if (!item?.id) return null;
+  return { id: String(item.id), title: item?.snippet?.title ?? null };
+}
+
+/**
+ * Try each candidate handle in order and stop at the first that resolves.
+ *
+ * Networks rename their channels, and the obvious handle is frequently wrong,
+ * so rather than guessing one spelling per channel we let the API arbitrate a
+ * short list. Costs 1 unit per handle actually tried.
+ */
 async function resolveAll(apiKey: string): Promise<Resolved[]> {
   return Promise.all(
     HIGHLIGHT_CHANNELS.map(async (channel): Promise<Resolved> => {
       const base: Resolved = {
         name: channel.name,
-        handle: channel.handle,
+        tried: [],
+        matched: null,
         configured: channel.id,
         resolved: null,
         title: null,
         error: null,
+        units: 0,
       };
-      try {
-        const url =
-          'https://www.googleapis.com/youtube/v3/channels' +
-          `?part=id,snippet&forHandle=${encodeURIComponent(channel.handle)}` +
-          `&key=${encodeURIComponent(apiKey)}`;
-        const raw = await fetchJson<any>(url, 10_000);
-        const item = raw?.items?.[0];
-        if (!item?.id) return { ...base, error: 'no channel found for that handle' };
-        return { ...base, resolved: String(item.id), title: item?.snippet?.title ?? null };
-      } catch (err) {
-        return { ...base, error: redact(String(err)).slice(0, 160) };
+
+      let lastError: string | null = null;
+      for (const handle of channel.handles) {
+        base.tried.push(handle);
+        base.units += 1;
+        try {
+          const found = await lookup(handle, apiKey);
+          if (found) {
+            return { ...base, matched: handle, resolved: found.id, title: found.title };
+          }
+        } catch (err) {
+          lastError = redact(String(err)).slice(0, 120);
+        }
       }
+
+      return { ...base, error: lastError ?? 'no channel found for any candidate handle' };
     }),
   );
 }
@@ -62,43 +91,49 @@ function render(rows: Resolved[]): string {
   const lines: string[] = [];
   const ok = rows.filter((r) => r.resolved);
   const failed = rows.filter((r) => !r.resolved);
+  const units = rows.reduce((n, r) => n + r.units, 0);
 
   lines.push('CFB Saturday — YouTube channel ID resolver');
-  lines.push('='.repeat(66));
+  lines.push('='.repeat(70));
   lines.push('');
-  lines.push(`Resolved ${ok.length} of ${rows.length} channels. Cost: ~${rows.length} quota units.`);
+  lines.push(`Resolved ${ok.length} of ${rows.length} channels. Cost: ${units} quota units.`);
   lines.push('');
 
   for (const r of rows) {
     const mark = !r.resolved ? 'FAIL' : r.resolved === r.configured ? ' ok ' : ' NEW';
-    const detail = r.resolved ? `${r.resolved}  (${r.title ?? ''})` : (r.error ?? 'unknown error');
-    lines.push(`  [${mark}] ${r.handle.padEnd(24)} ${detail}`);
+    if (r.resolved) {
+      lines.push(`  [${mark}] ${r.name.padEnd(24)} ${r.matched}`);
+      lines.push(`         ${''.padEnd(24)} ${r.resolved}  (${r.title ?? ''})`);
+    } else {
+      lines.push(`  [${mark}] ${r.name.padEnd(24)} none of: ${r.tried.join(', ')}`);
+    }
   }
 
   lines.push('');
-  lines.push('-'.repeat(66));
+  lines.push('-'.repeat(70));
   lines.push('PASTE THIS into HIGHLIGHT_CHANNELS in config.ts');
   lines.push('(or just send this whole page to Claude and it will do it)');
-  lines.push('-'.repeat(66));
+  lines.push('-'.repeat(70));
   lines.push('');
 
   for (const r of rows) {
-    // A failed lookup must not throw away an id we already had — fall back to
-    // whatever is configured, and only emit TODO_VERIFY when there is nothing.
+    // A failed lookup must not throw away an id we already had.
     const id = r.resolved ?? r.configured ?? 'TODO_VERIFY';
-    const priority = HIGHLIGHT_CHANNELS.find((c) => c.handle === r.handle)?.priority;
+    const source = HIGHLIGHT_CHANNELS.find((c) => c.name === r.name);
+    const handles = r.matched ? `['${r.matched}']` : `['${(source?.handles ?? []).join("', '")}']`;
     lines.push(
-      `  { name: '${r.name}', id: '${id}', handle: '${r.handle}'` +
-        (priority !== undefined ? `, priority: ${priority}` : '') +
+      `  { name: '${r.name}', id: '${id}', handles: ${handles}` +
+        (source?.priority !== undefined ? `, priority: ${source.priority}` : '') +
         ' },',
     );
   }
 
   if (failed.length > 0) {
     lines.push('');
-    lines.push(`${failed.length} handle(s) did not resolve: ${failed.map((f) => f.handle).join(', ')}`);
-    lines.push('Check the handle at youtube.com/<handle>. Left as TODO_VERIFY above,');
-    lines.push('which the app skips at runtime rather than polling a wrong id.');
+    lines.push(`${failed.length} channel(s) unresolved: ${failed.map((f) => f.name).join(', ')}`);
+    lines.push('None of their candidate handles exist. Open youtube.com, find the');
+    lines.push('channel, use Share channel -> Copy channel ID, and send that instead.');
+    lines.push('Left as TODO_VERIFY, which the app skips rather than polling a wrong id.');
   }
 
   lines.push('');

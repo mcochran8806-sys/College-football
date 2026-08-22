@@ -34,10 +34,11 @@ function loadKey() {
 function readHandles() {
   const src = readFileSync(resolve(process.cwd(), 'config.ts'), 'utf8');
   const out = [];
-  const re = /\{\s*name:\s*'([^']+)',\s*id:\s*'([^']*)',\s*handle:\s*'([^']+)'/g;
+  const re = /name:\s*'([^']+)',\s*id:\s*'([^']*)',\s*handles:\s*\[([^\]]*)\]/g;
   let m;
   while ((m = re.exec(src)) !== null) {
-    out.push({ name: m[1], id: m[2], handle: m[3] });
+    const handles = [...m[3].matchAll(/'([^']+)'/g)].map((h) => h[1]);
+    out.push({ name: m[1], id: m[2], handles });
   }
   return out;
 }
@@ -65,26 +66,35 @@ if (!key) {
 }
 
 const channels = readHandles();
-console.log(`Resolving ${channels.length} channel handle(s). Cost: ~${channels.length} quota units.\n`);
+const maxUnits = channels.reduce((n, c) => n + c.handles.length, 0);
+console.log(`Resolving ${channels.length} channel(s). Cost: up to ${maxUnits} quota units.\n`);
 
 const results = [];
 for (const channel of channels) {
-  try {
-    const found = await resolveHandle(channel.handle, key);
-    if (!found) {
-      console.log(`  ✗ ${channel.handle.padEnd(26)} no channel found`);
-      results.push({ ...channel, resolved: null });
-      continue;
+  let hit = null;
+  let lastError = null;
+  for (const handle of channel.handles) {
+    try {
+      const found = await resolveHandle(handle, key);
+      if (found) {
+        hit = { handle, ...found };
+        break;
+      }
+    } catch (err) {
+      lastError = err.message;
     }
-    const changed = found.id !== channel.id;
-    console.log(
-      `  ${changed ? '→' : '✓'} ${channel.handle.padEnd(26)} ${found.id}  (${found.title})`,
-    );
-    results.push({ ...channel, resolved: found.id });
-  } catch (err) {
-    console.log(`  ✗ ${channel.handle.padEnd(26)} ${err.message}`);
-    results.push({ ...channel, resolved: null });
   }
+
+  if (!hit) {
+    console.log(`  ✗ ${channel.name.padEnd(24)} none of: ${channel.handles.join(', ')}` +
+      (lastError ? `  (${lastError})` : ''));
+    results.push({ ...channel, resolved: null, matched: null });
+    continue;
+  }
+
+  const changed = hit.id !== channel.id;
+  console.log(`  ${changed ? '→' : '✓'} ${channel.name.padEnd(24)} ${hit.handle}  ${hit.id}  (${hit.title})`);
+  results.push({ ...channel, resolved: hit.id, matched: hit.handle });
 }
 
 const updates = results.filter((r) => r.resolved && r.resolved !== r.id);
@@ -96,13 +106,13 @@ if (updates.length === 0) {
 } else {
   console.log('Paste these into HIGHLIGHT_CHANNELS in config.ts:\n');
   for (const r of updates) {
-    console.log(`  { name: '${r.name}', id: '${r.resolved}', handle: '${r.handle}' },`);
+    console.log(`  { name: '${r.name}', id: '${r.resolved}', handles: ['${r.matched}'] },`);
   }
 }
 if (failures.length > 0) {
   console.log(
-    `\n${failures.length} handle(s) did not resolve: ${failures.map((f) => f.handle).join(', ')}`,
+    `\n${failures.length} channel(s) did not resolve: ${failures.map((f) => f.name).join(', ')}`,
   );
-  console.log('Check the handle on youtube.com/@handle — leave the id as TODO_VERIFY until then.');
+  console.log('Find the channel on youtube.com, use Share channel -> Copy channel ID.');
   console.log('A wrong id returns an empty playlist and fails silently, which is why we do not guess.');
 }

@@ -33,30 +33,79 @@ export interface HighlightChannel {
   name: string;
   /** 24-char UC... channel ID, or 'TODO_VERIFY' until resolved. */
   id: string;
-  /** @handle used by scripts/resolve-channels.mjs to look the id up. */
-  handle: string;
+  /**
+   * Candidate @handles, tried in order by /api/resolve-channels until one
+   * resolves. Networks rename their channels and the obvious handle is often
+   * wrong — @SECNetwork and @bigtennetwork both 404 — so we let the YouTube
+   * API decide which spelling is real instead of guessing.
+   */
+  handles: string[];
   /** Favor this channel's clips when several match the same game. */
   priority?: number;
 }
 
 export const HIGHLIGHT_CHANNELS: HighlightChannel[] = [
-  // Verified: ESPN's main channel ID is widely published and stable.
-  { name: 'ESPN', id: 'UCiWLfSweyRNmLpgEHekhoAg', handle: '@ESPN', priority: 2 },
+  // ---- Verified by /api/resolve-channels against the live API ----
+  { name: 'ESPN', id: 'UCiWLfSweyRNmLpgEHekhoAg', handles: ['@ESPN'], priority: 2 },
+  {
+    name: 'Big 12 Conference',
+    id: 'UCLnfOCTbfqMy_3ah8OmTHEQ',
+    handles: ['@Big12Conference'],
+    priority: 2,
+  },
+  { name: 'FOX Sports', id: 'UCwNqHDsnBCKT-olwJwIFyfg', handles: ['@FOXSports'], priority: 1 },
+  {
+    name: 'FOX College Football',
+    id: 'UCpwix-O6ceqMgdxhqIynzFA',
+    handles: ['@CFBONFOX'],
+    priority: 3,
+  },
+  { name: 'CBS Sports', id: 'UCja8sZ2T4ylIqjggA1Zuukg', handles: ['@CBSSports'], priority: 1 },
+  {
+    name: 'Mountain West',
+    id: 'UC-En6dgdJQw9sQxOtuRstJQ',
+    handles: ['@MountainWest'],
+    priority: 1,
+  },
 
-  // NOT VERIFIED. Handles are correct; the UC... ids are not something we will
-  // invent, because a wrong id returns an empty playlist and fails silently.
-  // Run `npm run resolve-channels` with your API key to fill these in.
-  { name: 'ESPN College Football', id: 'TODO_VERIFY', handle: '@ESPNCollegeFootball', priority: 3 },
-  { name: 'SEC Network', id: 'TODO_VERIFY', handle: '@SECNetwork', priority: 3 },
-  { name: 'Big Ten Network', id: 'TODO_VERIFY', handle: '@bigtennetwork', priority: 2 },
-  { name: 'ACC Digital Network', id: 'TODO_VERIFY', handle: '@theACCDN', priority: 3 },
-  { name: 'Big 12 Conference', id: 'TODO_VERIFY', handle: '@Big12Conference', priority: 2 },
-  { name: 'FOX Sports', id: 'TODO_VERIFY', handle: '@FOXSports', priority: 1 },
-  { name: 'FOX College Football', id: 'TODO_VERIFY', handle: '@CFBONFOX', priority: 2 },
-  { name: 'CBS Sports', id: 'TODO_VERIFY', handle: '@CBSSports', priority: 1 },
-  { name: 'NCAA Football', id: 'TODO_VERIFY', handle: '@NCAAFootball', priority: 1 },
-  { name: 'Pac-12 / Mountain West', id: 'TODO_VERIFY', handle: '@MountainWest', priority: 1 },
-  { name: 'Sun Belt Conference', id: 'TODO_VERIFY', handle: '@SunBeltConference', priority: 1 },
+  // ---- Unresolved: first handle 404'd, alternates listed for the resolver ----
+  // Reload /api/resolve-channels after deploying to see which of these are real.
+  {
+    name: 'SEC Network',
+    id: 'TODO_VERIFY',
+    handles: ['@SEC', '@SECNetwork', '@SECSports', '@SECfootball', '@TheSECNetwork'],
+    priority: 3,
+  },
+  {
+    name: 'Big Ten Football',
+    id: 'TODO_VERIFY',
+    handles: ['@B1GFootball', '@bigtennetwork', '@BigTenNetwork', '@B1G', '@bigten'],
+    priority: 3,
+  },
+  {
+    name: 'ACC Digital Network',
+    id: 'TODO_VERIFY',
+    handles: ['@theACC', '@ACCDigitalNetwork', '@ACCFootball', '@ACC', '@theACCDN'],
+    priority: 3,
+  },
+  {
+    name: 'ESPN College Football',
+    id: 'TODO_VERIFY',
+    handles: ['@ESPNCollegeFootball', '@ESPNCFB', '@CollegeFootballonESPN', '@ESPNCollegeSports'],
+    priority: 3,
+  },
+  {
+    name: 'NCAA',
+    id: 'TODO_VERIFY',
+    handles: ['@NCAA', '@ncaachampionships', '@NCAAFootball', '@NCAASports'],
+    priority: 1,
+  },
+  {
+    name: 'Sun Belt Conference',
+    id: 'TODO_VERIFY',
+    handles: ['@SunBeltFB', '@SunBeltConference', '@SunBelt', '@SunBeltFootball'],
+    priority: 1,
+  },
 ];
 
 /** Everything that ticks, in milliseconds. */
