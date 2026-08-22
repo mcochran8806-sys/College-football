@@ -9,6 +9,8 @@ interface Props {
   pageCount: number;
   pageIndex: number;
   gameCount: number;
+  /** How many are actually in the rotation after the page cap. */
+  shownCount: number;
   favorites: string[];
   favoritesSource: 'url' | 'storage' | 'config';
 }
@@ -21,6 +23,7 @@ export default function ScoreboardHeader({
   pageCount,
   pageIndex,
   gameCount,
+  shownCount,
   favorites,
   favoritesSource,
 }: Props) {
@@ -36,7 +39,9 @@ export default function ScoreboardHeader({
       <div className="flex items-baseline gap-4">
         <h1 className="text-2xl font-semibold tracking-tight text-field-100">{longDate()}</h1>
         <span className="text-lg text-field-500">
-          {gameCount} {gameCount === 1 ? 'game' : 'games'}
+          {shownCount < gameCount
+            ? `${shownCount} of ${gameCount} games`
+            : `${gameCount} ${gameCount === 1 ? 'game' : 'games'}`}
         </span>
         {/* Which favorites are live on this screen. Without this you have no
             way to tell whether a ?favorites= URL actually took effect. */}

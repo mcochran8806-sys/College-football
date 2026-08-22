@@ -1,4 +1,4 @@
-import { CLOSE_GAME } from '../../config';
+import { CLOSE_GAME, GAMES_PER_PAGE, SLATE } from '../../config';
 import { isFavoriteGame } from '../../shared/favorites';
 import type { Game } from '../../shared/types';
 
@@ -54,6 +54,30 @@ export function sortGames(games: Game[], favorites: string[]): Game[] {
 
     return Date.parse(a.date) - Date.parse(b.date);
   });
+}
+
+/**
+ * Trim the slate to what's worth looking at.
+ *
+ * Favorites always survive, whatever their state — the whole point of marking
+ * a team is to see it whether it's mid-drive or kicking off in three hours.
+ */
+export function filterSlate(games: Game[], favorites: string[]): Game[] {
+  if (SLATE.mode === 'all') return games;
+
+  const favorite = (g: Game) => isFavoriteGame(g, favorites);
+  const live = games.filter((g) => g.state === 'in');
+
+  if (SLATE.mode === 'live-only') {
+    return games.filter((g) => g.state === 'in' || favorite(g));
+  }
+
+  // 'live-first': only start hiding once there's enough live football to fill
+  // a screen. At 11am on a Saturday almost everything is still 'pre', and an
+  // empty board is worse than a full one.
+  if (live.length < GAMES_PER_PAGE) return games;
+
+  return games.filter((g) => g.state !== 'pre' || favorite(g));
 }
 
 export function paginate<T>(items: T[], perPage: number): T[][] {

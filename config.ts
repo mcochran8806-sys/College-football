@@ -84,8 +84,32 @@ export const CACHE_TTL = {
   plays: 15_000,
 } as const;
 
-/** Scoreboard grid: 4 across x 3 down on a 1080p TV. */
-export const GAMES_PER_PAGE = 12;
+/** Scoreboard grid: 3 across x 2 down on a 1080p TV. */
+export const GAMES_PER_PAGE = 6;
+
+/**
+ * What to put on the board, and how much of it.
+ *
+ * ESPN returns the whole current week with no date filter — 99 games in
+ * midseason. At six per page that's 17 pages, over four minutes to cycle back
+ * to your own team, which defeats the point of a glanceable board.
+ *
+ * mode:
+ *   'all'        every game ESPN returns
+ *   'live-first' once enough games are in progress to fill a page, games that
+ *                haven't kicked off drop off the board. Favorites are never
+ *                dropped. Early in the day, when little is live, everything
+ *                stays so the board isn't empty.
+ *   'live-only'  favorites and in-progress games, nothing else
+ *
+ * maxPages caps the rotation regardless of mode: you see the top N games by
+ * the existing sort (favorites, then close-and-late, then live, then ranked)
+ * and never sit through pages of blowouts. 0 disables the cap.
+ */
+export const SLATE = {
+  mode: 'live-first' as 'all' | 'live-first' | 'live-only',
+  maxPages: 4,
+} as const;
 
 /** A game is "close and late" (and gets the accent glow) at or past this
  *  period with a margin at or under this many points. */

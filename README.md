@@ -309,7 +309,9 @@ Everything tunable lives in `config.ts`:
 | `INTERVALS.pageAdvance` | 15s | Scoreboard auto-advance |
 | `INTERVALS.scoreCardHold` | 12s | How long an interstitial holds |
 | `INTERVALS.burnInShift` | 10min | Layout nudge for OLED panels |
-| `GAMES_PER_PAGE` | 12 | 4×3 grid |
+| `GAMES_PER_PAGE` | 6 | 3×2 grid |
+| `SLATE.mode` | `live-first` | `all`, `live-first`, or `live-only` — see below |
+| `SLATE.maxPages` | 4 | Caps the rotation; 0 disables |
 | `CLOSE_GAME` | 4th qtr, ≤8 pts | Triggers the accent glow |
 | `DEBUG_DATE` | `''` | Set `YYYYMMDD` to pin a past slate |
 
@@ -422,10 +424,12 @@ Played-clip and seen-play state is session memory only.
 ## Notes and caveats
 
 - **ESPN's default slate is the current week, not today.** With no `?dates`
-  param ESPN returns the whole week — ~99 games mid-season, which paginates to
-  ~9 screens. That's usually what you want on a Saturday (you also see
-  Thursday and Friday finals). Set `DEBUG_DATE` in `config.ts`, or pass
-  `?dates=YYYYMMDD`, to pin a single day.
+  param ESPN returns the whole week — ~99 games mid-season. That's why `SLATE`
+  exists: `live-first` drops games that haven't kicked off once there's enough
+  live football to fill a page (favorites are never dropped), and `maxPages`
+  caps the rotation so a lap takes about a minute instead of four. Set
+  `SLATE.mode` to `all` for the raw, unfiltered week. To pin a single day
+  instead, set `DEBUG_DATE` in `config.ts` or pass `?dates=YYYYMMDD`.
 - **ESPN's endpoints are undocumented and unofficial.** The schema can shift
   mid-season. Every field access in `api/_lib/espn.ts` is optional-chained and
   coerced, and `shrinkScoreboard()` is contractually required to return a valid

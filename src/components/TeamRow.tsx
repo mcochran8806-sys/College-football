@@ -41,29 +41,29 @@ export default function TeamRow({ team, game, dim }: Props) {
   const score = team.score;
 
   return (
-    <div className={`flex items-center gap-2 ${dim ? 'opacity-45' : ''}`}>
+    <div className={`flex items-center gap-3 ${dim ? 'opacity-45' : ''}`}>
       {/* Possession marker holds its width whether or not the ball is here, so
           the row doesn't shift as possession changes. Kept narrow: every pixel
           here comes out of the team name, and long names ("Mississippi State")
           are the tightest thing on the card. */}
-      <span className="w-2.5 shrink-0 text-xl leading-none text-possession">
+      <span className="w-3 shrink-0 text-2xl leading-none text-possession">
         {hasBall ? '●' : ''}
       </span>
 
-      <TeamLogo src={team.logo} size="h-10 w-10" />
+      <TeamLogo src={team.logo} size="h-14 w-14" />
 
       <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
         {team.rank && (
-          <span className="shrink-0 text-lg font-semibold text-field-500">{team.rank}</span>
+          <span className="shrink-0 text-2xl font-semibold text-field-500">{team.rank}</span>
         )}
-        <span className="truncate text-[1.75rem] font-semibold leading-tight tracking-tight text-field-100">
+        <span className="truncate text-[2.25rem] font-semibold leading-tight tracking-tight text-field-100">
           {team.shortDisplayName}
         </span>
       </div>
 
       <span
         className={
-          'shrink-0 text-[4rem] font-bold leading-none tabular-nums ' +
+          'shrink-0 text-[5rem] font-bold leading-none tabular-nums ' +
           (flash ? 'animate-score-pulse' : '')
         }
       >

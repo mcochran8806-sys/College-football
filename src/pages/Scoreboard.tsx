@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { GAMES_PER_PAGE, INTERVALS } from '../../config';
+import { GAMES_PER_PAGE, INTERVALS, SLATE } from '../../config';
 import GameCard from '../components/GameCard';
 import ScoreboardHeader from '../components/ScoreboardHeader';
 import { useBurnInShift } from '../hooks/useBurnInShift';
 import { useFavorites } from '../hooks/useFavorites';
 import { usePoll, useSecondsSince } from '../hooks/usePoll';
 import { getScoreboard } from '../lib/api';
-import { isFavorite, paginate, sortGames } from '../lib/sortGames';
+import { filterSlate, isFavorite, paginate, sortGames } from '../lib/sortGames';
 
 /**
  * Screen 1. Non-interactive, unattended, twelve hours at a stretch.
@@ -20,8 +20,14 @@ export default function Scoreboard() {
   const shift = useBurnInShift();
   const { teams: favorites, source: favoritesSource } = useFavorites();
 
-  const games = useMemo(() => sortGames(data?.games ?? [], favorites), [data, favorites]);
-  const pages = useMemo(() => paginate(games, GAMES_PER_PAGE), [games]);
+  const games = useMemo(
+    () => sortGames(filterSlate(data?.games ?? [], favorites), favorites),
+    [data, favorites],
+  );
+  const pages = useMemo(() => {
+    const all = paginate(games, GAMES_PER_PAGE);
+    return SLATE.maxPages > 0 ? all.slice(0, SLATE.maxPages) : all;
+  }, [games]);
 
   const [pageIndex, setPageIndex] = useState(0);
   const [visible, setVisible] = useState(true);
@@ -63,6 +69,7 @@ export default function Scoreboard() {
           pageCount={pages.length}
           pageIndex={pageIndex}
           gameCount={games.length}
+          shownCount={pages.reduce((n, p) => n + p.length, 0)}
           favorites={favorites}
           favoritesSource={favoritesSource}
         />
@@ -74,7 +81,7 @@ export default function Scoreboard() {
         ) : (
           <main
             className={
-              'grid min-h-0 flex-1 grid-cols-4 grid-rows-3 gap-4 transition-opacity duration-500 ' +
+              'grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-5 transition-opacity duration-500 ' +
               (visible ? 'opacity-100' : 'opacity-0')
             }
           >
