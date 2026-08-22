@@ -45,22 +45,44 @@ export interface HighlightChannel {
 }
 
 export const HIGHLIGHT_CHANNELS: HighlightChannel[] = [
-  // ---- Verified by /api/resolve-channels against the live API ----
+  // Every id below was resolved against the live YouTube API by
+  // /api/resolve-channels — none were guessed. The handle that actually
+  // worked is kept so a future run can re-verify it.
   { name: 'ESPN', id: 'UCiWLfSweyRNmLpgEHekhoAg', handles: ['@ESPN'], priority: 2 },
+  {
+    name: 'ESPN College Football',
+    id: 'UCzRWWsFjqHk1an4OnVPsl9g',
+    handles: ['@ESPNCFB'],
+    priority: 3,
+  },
+  { name: 'SEC Network', id: 'UC60q_WUDde_NK-ze3frvtiA', handles: ['@SEC'], priority: 3 },
+  {
+    name: 'Big Ten Football',
+    id: 'UCXnslB_TwYqScBRf4bPf3vA',
+    handles: ['@B1GFootball'],
+    priority: 3,
+  },
+  {
+    name: 'ACC Digital Network',
+    id: 'UCOhy7TcR1gGD8nQBqrF2FaA',
+    handles: ['@ACCDigitalNetwork'],
+    priority: 3,
+  },
   {
     name: 'Big 12 Conference',
     id: 'UCLnfOCTbfqMy_3ah8OmTHEQ',
     handles: ['@Big12Conference'],
-    priority: 2,
+    priority: 3,
   },
-  { name: 'FOX Sports', id: 'UCwNqHDsnBCKT-olwJwIFyfg', handles: ['@FOXSports'], priority: 1 },
   {
     name: 'FOX College Football',
     id: 'UCpwix-O6ceqMgdxhqIynzFA',
     handles: ['@CFBONFOX'],
     priority: 3,
   },
+  { name: 'FOX Sports', id: 'UCwNqHDsnBCKT-olwJwIFyfg', handles: ['@FOXSports'], priority: 1 },
   { name: 'CBS Sports', id: 'UCja8sZ2T4ylIqjggA1Zuukg', handles: ['@CBSSports'], priority: 1 },
+  { name: 'NCAA', id: 'UCOnOdMq78X8ifkIxnIoqfHQ', handles: ['@NCAA'], priority: 1 },
   {
     name: 'Mountain West',
     id: 'UC-En6dgdJQw9sQxOtuRstJQ',
@@ -68,42 +90,20 @@ export const HIGHLIGHT_CHANNELS: HighlightChannel[] = [
     priority: 1,
   },
 
-  // ---- Unresolved: first handle 404'd, alternates listed for the resolver ----
-  // Reload /api/resolve-channels after deploying to see which of these are real.
-  {
-    name: 'SEC Network',
-    id: 'TODO_VERIFY',
-    handles: ['@SEC', '@SECNetwork', '@SECSports', '@SECfootball', '@TheSECNetwork'],
-    priority: 3,
-  },
-  {
-    name: 'Big Ten Football',
-    id: 'TODO_VERIFY',
-    handles: ['@B1GFootball', '@bigtennetwork', '@BigTenNetwork', '@B1G', '@bigten'],
-    priority: 3,
-  },
-  {
-    name: 'ACC Digital Network',
-    id: 'TODO_VERIFY',
-    handles: ['@theACC', '@ACCDigitalNetwork', '@ACCFootball', '@ACC', '@theACCDN'],
-    priority: 3,
-  },
-  {
-    name: 'ESPN College Football',
-    id: 'TODO_VERIFY',
-    handles: ['@ESPNCollegeFootball', '@ESPNCFB', '@CollegeFootballonESPN', '@ESPNCollegeSports'],
-    priority: 3,
-  },
-  {
-    name: 'NCAA',
-    id: 'TODO_VERIFY',
-    handles: ['@NCAA', '@ncaachampionships', '@NCAAFootball', '@NCAASports'],
-    priority: 1,
-  },
+  // Unresolved: none of these handles exist. Skipped at runtime rather than
+  // polling a wrong id. Extra candidates added for the next resolver run; if
+  // they all fail too, grab the id from youtube.com via Share channel.
   {
     name: 'Sun Belt Conference',
     id: 'TODO_VERIFY',
-    handles: ['@SunBeltFB', '@SunBeltConference', '@SunBelt', '@SunBeltFootball'],
+    handles: [
+      '@SunBeltConf',
+      '@SunBeltSports',
+      '@TheSunBelt',
+      '@SunBeltFB',
+      '@SunBeltConference',
+      '@SunBelt',
+    ],
     priority: 1,
   },
 ];

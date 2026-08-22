@@ -14,10 +14,10 @@
  * changed from C to U (UCxxxx -> UUxxxx). That's a pure string transform, so
  * discovering where to poll costs ZERO units.
  *
- * Steady-state math for a 12-hour Saturday:
+ * Steady-state math for a 12-hour Saturday (11 channels resolved, 1 pending):
  *
- *   12 channels x 1 unit x 30 polls/hour (one per 2 min) x 12 hours
- *     = 4,320 units/day
+ *   11 channels x 1 unit x 30 polls/hour (one per 2 min) x 12 hours
+ *     = 3,960 units/day  (4,320 if the 12th resolves)
  *
  * ...comfortably inside 10,000, with room for a second TV, a dev session, and
  * a few retries. Note the server-side 90s cache means the browser's 2-minute
