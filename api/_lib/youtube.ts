@@ -16,8 +16,9 @@
  *
  * Steady-state math for a 12-hour game day, per league:
  *
- *   11 channels x 1 unit x 30 polls/hour (one per 2 min) x 12 hours
+ *   11 college channels x 1 unit x 30 polls/hour (one per 2 min) x 12 hours
  *     = 3,960 units/day, plus ~2 units/poll for duration lookups
+ *   10 NFL channels on the same cadence = 3,600 units/day
  *
  * Both leagues sharing one key is fine on a normal weekend — college plays
  * Saturday, the NFL plays Sunday — but running both walls hard on the same day

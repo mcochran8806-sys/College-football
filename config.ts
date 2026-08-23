@@ -128,13 +128,14 @@ export const LEAGUE_SETTINGS: Record<
       { name: 'FOX Sports', id: 'UCwNqHDsnBCKT-olwJwIFyfg', handles: ['@FOXSports'], priority: 1 },
       { name: 'CBS Sports', id: 'UCja8sZ2T4ylIqjggA1Zuukg', handles: ['@CBSSports'], priority: 1 },
 
-      // NOT resolved. @Lions belongs to the Saitama Seibu Lions, a Japanese
-      // baseball team — it returned a perfectly valid id for entirely the
-      // wrong channel, which is why the resolver now title-checks every hit.
+      // Resolved via @DetroitLionsNFL. Note it is NOT @Lions — that handle
+      // belongs to the Saitama Seibu Lions, a Japanese baseball team, and
+      // returned a perfectly valid id for entirely the wrong channel. The
+      // resolver's title check is what caught it.
       {
         name: 'Detroit Lions',
-        id: 'TODO_VERIFY',
-        handles: ['@detroitlions', '@DetroitLionsNFL', '@TheDetroitLions'],
+        id: 'UCv5J06V-ESk5_1uriG65f3w',
+        handles: ['@DetroitLionsNFL'],
         priority: 3,
       },
     ],

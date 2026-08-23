@@ -155,6 +155,8 @@ perfectly and still be the wrong channel. Both of these are real results:
 @NFLonESPN  -> UChqc3OiOL343GDDlmLEjE2w  (Lil Yeet)           somebody's vlog
 ```
 
+The Detroit Lions are `@DetroitLionsNFL`, not `@Lions` or `@detroitlions`.
+
 Each returned a valid 24-character id. The only signal anything was wrong was
 the channel title, so `titleLooksPlausible()` compares the resolved title to
 the configured name and marks a mismatch `WRONG` rather than adopting it. The
@@ -376,7 +378,7 @@ Everything tunable lives in `config.ts`:
 |---|---|---|
 | `LEAGUE_SETTINGS.cfb.favorites` | Georgia, Georgia Tech, Alabama | Abbreviations or names; resolved through the alias table |
 | `LEAGUE_SETTINGS.nfl.favorites` | Lions, Seahawks, Eagles | Nicknames are unique in the NFL; bare cities are not |
-| `LEAGUE_SETTINGS.<league>.channels` | 12 college / 11 NFL | `TODO_VERIFY` entries are skipped, not guessed |
+| `LEAGUE_SETTINGS.<league>.channels` | 12 college / 10 NFL | `TODO_VERIFY` entries are skipped, not guessed |
 | `INTERVALS.scoreboardPoll` | 20s | Browser → `/api/scoreboard` |
 | `INTERVALS.highlightsPoll` | 2min | Browser → `/api/highlights` |
 | `INTERVALS.pageAdvance` | 15s | Scoreboard auto-advance |
