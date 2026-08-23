@@ -12,7 +12,8 @@
     "test:matcher": "node scripts/test-matcher.mjs",
     "test:relevance": "node scripts/test-relevance.mjs",
     "test:nfl": "node scripts/test-nfl.mjs",
-    "test": "npm run test:matcher && npm run test:relevance && npm run test:nfl"
+    "test": "npm run test:matcher && npm run test:relevance && npm run test:nfl && npm run test:plausible",
+    "test:plausible": "node scripts/test-plausible.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

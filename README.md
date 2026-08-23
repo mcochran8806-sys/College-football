@@ -39,7 +39,7 @@ That last row matters: ESPN and CBS cover both leagues, so college content is
 exactly the contamination risk on a pro wall, and vice versa. Each league
 carries its own `offTopic` list.
 
-`npm run test` runs all three suites (75 cases). `npm run test:nfl` covers the
+`npm run test` runs all four suites (91 cases). `npm run test:nfl` covers the
 city traps specifically — "New York vs Buffalo Highlights" must NOT resolve,
 because there is no way to know which New York team it means.
 
@@ -84,10 +84,11 @@ a real touchdown.
 ```bash
 npm run build             # typecheck + production build
 npm run typecheck         # tsc only
-npm run test              # all three suites (75 cases)
+npm run test              # all four suites (91 cases)
 npm run test:matcher      # college title matching
 npm run test:relevance    # wall relevance + reel detection
 npm run test:nfl          # NFL matching, city traps, favorites
+npm run test:plausible    # wrong-channel detection
 npm run resolve-channels  # one-time YouTube channel ID lookup
 ```
 
@@ -146,10 +147,25 @@ spelling, the YouTube API arbitrates a short list. `channels.list?forHandle`
 costs 1 unit per handle actually tried (~33 units for a full run), and it is
 never called from a request path.
 
+**Resolving is not enough — the title is checked too.** A handle can resolve
+perfectly and still be the wrong channel. Both of these are real results:
+
+```
+@Lions      -> UChLK3zS3-kR21JVTaNovPIg  (埼玉西武ライオンズ)   Japanese baseball
+@NFLonESPN  -> UChqc3OiOL343GDDlmLEjE2w  (Lil Yeet)           somebody's vlog
+```
+
+Each returned a valid 24-character id. The only signal anything was wrong was
+the channel title, so `titleLooksPlausible()` compares the resolved title to
+the configured name and marks a mismatch `WRONG` rather than adopting it. The
+check is deliberately loose — "FOX College Football" vs "CFB ON FOX" shares
+only the token "fox", and "Mountain West" vs "MountainWestConf" shares no
+token at all but is a clear substring. What fails is having nothing in common.
+
 Channels still marked `TODO_VERIFY` are skipped at runtime with a warning in
-the function logs, and a failed lookup never overwrites an id that already
-resolved. If none of a channel's candidates exist, find it on youtube.com and
-use **Share channel → Copy channel ID**.
+the function logs, and neither a failed nor an implausible lookup overwrites
+an id that already resolved. If none of a channel's candidates work, find it
+on youtube.com and use **Share channel → Copy channel ID**.
 
 ---
 

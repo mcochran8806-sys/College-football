@@ -31,9 +31,47 @@ interface Resolved {
   configured: string;
   resolved: string | null;
   title: string | null;
+  /** False when the resolved channel's title has nothing to do with the name
+   *  we configured — a handle squatting on the wrong channel. */
+  plausible: boolean;
   error: string | null;
   /** Quota units spent on this channel — one per handle tried. */
   units: number;
+}
+
+/**
+ * Does the channel this handle resolved to plausibly belong to the thing we
+ * asked for?
+ *
+ * A handle can resolve perfectly and still be the wrong channel — @Lions is a
+ * Japanese baseball team (埼玉西武ライオンズ), and @NFLonESPN belongs to
+ * someone called "Lil Yeet". Both returned valid 24-character ids. The only
+ * signal that anything is wrong is the channel title, so compare it.
+ *
+ * Deliberately loose: "FOX College Football" vs "CFB ON FOX" shares only the
+ * token "fox", and "Mountain West" vs "MountainWestConf" shares no token at
+ * all but is a clear substring. Either is enough. What must fail is having
+ * nothing in common.
+ */
+export function titleLooksPlausible(configuredName: string, channelTitle: string): boolean {
+  const squash = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const tokens = (v: string) =>
+    v
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 3);
+
+  const nameSquashed = squash(configuredName);
+  const titleSquashed = squash(channelTitle);
+
+  // A title with no Latin characters at all (a Japanese channel name) can't be
+  // compared — and an empty string is a substring of everything, so guard it.
+  if (!titleSquashed || !nameSquashed) return false;
+
+  if (titleSquashed.includes(nameSquashed) || nameSquashed.includes(titleSquashed)) return true;
+
+  const titleTokens = new Set(tokens(channelTitle));
+  return tokens(configuredName).some((t) => titleTokens.has(t));
 }
 
 async function lookup(handle: string, apiKey: string): Promise<{ id: string; title: string | null } | null> {
@@ -64,6 +102,7 @@ async function resolveAll(apiKey: string, channels: HighlightChannel[]): Promise
         configured: channel.id,
         resolved: null,
         title: null,
+        plausible: true,
         error: null,
         units: 0,
       };
@@ -75,7 +114,23 @@ async function resolveAll(apiKey: string, channels: HighlightChannel[]): Promise
         try {
           const found = await lookup(handle, apiKey);
           if (found) {
-            return { ...base, matched: handle, resolved: found.id, title: found.title };
+            const plausible = titleLooksPlausible(channel.name, found.title ?? '');
+            if (!plausible) {
+              // Keep trying the remaining candidates — a later one may be the
+              // real channel. Only fall back to this if nothing better turns up.
+              console.warn(
+                `[resolve-channels] ${handle} resolved to "${found.title}", which does not ` +
+                  `look like "${channel.name}" — continuing to other candidates`,
+              );
+              if (!base.resolved) {
+                base.matched = handle;
+                base.resolved = found.id;
+                base.title = found.title;
+                base.plausible = false;
+              }
+              continue;
+            }
+            return { ...base, matched: handle, resolved: found.id, title: found.title, plausible: true };
           }
         } catch (err) {
           lastError = redact(String(err)).slice(0, 120);
@@ -90,8 +145,8 @@ async function resolveAll(apiKey: string, channels: HighlightChannel[]): Promise
 /** Plain text, because a person reads this in a browser tab. */
 function render(rows: Resolved[], league: LeagueConfig, channels: HighlightChannel[]): string {
   const lines: string[] = [];
-  const ok = rows.filter((r) => r.resolved);
-  const failed = rows.filter((r) => !r.resolved);
+  const ok = rows.filter((r) => r.resolved && r.plausible);
+  const failed = rows.filter((r) => !r.resolved && r.plausible);
   const units = rows.reduce((n, r) => n + r.units, 0);
 
   lines.push(`YouTube channel ID resolver — ${league.label}`);
@@ -100,11 +155,22 @@ function render(rows: Resolved[], league: LeagueConfig, channels: HighlightChann
   lines.push(`Resolved ${ok.length} of ${rows.length} channels. Cost: ${units} quota units.`);
   lines.push('');
 
+  const suspect = rows.filter((r) => r.resolved && !r.plausible);
+
   for (const r of rows) {
-    const mark = !r.resolved ? 'FAIL' : r.resolved === r.configured ? ' ok ' : ' NEW';
+    const mark = !r.resolved
+      ? 'FAIL'
+      : !r.plausible
+        ? 'WRONG'
+        : r.resolved === r.configured
+          ? ' ok '
+          : ' NEW';
     if (r.resolved) {
       lines.push(`  [${mark}] ${r.name.padEnd(24)} ${r.matched}`);
-      lines.push(`         ${''.padEnd(24)} ${r.resolved}  (${r.title ?? ''})`);
+      lines.push(
+        `         ${''.padEnd(24)} ${r.resolved}  (${r.title ?? ''})` +
+          (r.plausible ? '' : '   <-- title does not match, NOT used'),
+      );
     } else {
       lines.push(`  [${mark}] ${r.name.padEnd(24)} none of: ${r.tried.join(', ')}`);
     }
@@ -118,8 +184,9 @@ function render(rows: Resolved[], league: LeagueConfig, channels: HighlightChann
   lines.push('');
 
   for (const r of rows) {
-    // A failed lookup must not throw away an id we already had.
-    const id = r.resolved ?? r.configured ?? 'TODO_VERIFY';
+    // A failed lookup must not throw away an id we already had — and an
+    // implausible one is treated as a failure, not adopted.
+    const id = (r.plausible ? r.resolved : null) ?? r.configured ?? 'TODO_VERIFY';
     const source = channels.find((c) => c.name === r.name);
     const handles = r.matched ? `['${r.matched}']` : `['${(source?.handles ?? []).join("', '")}']`;
     lines.push(
@@ -127,6 +194,18 @@ function render(rows: Resolved[], league: LeagueConfig, channels: HighlightChann
         (source?.priority !== undefined ? `, priority: ${source.priority}` : '') +
         ' },',
     );
+  }
+
+  if (suspect.length > 0) {
+    lines.push('');
+    lines.push(
+      `${suspect.length} handle(s) resolved to an unrelated channel and were NOT adopted:`,
+    );
+    for (const r of suspect) {
+      lines.push(`  ${r.matched} -> "${r.title}" (wanted "${r.name}")`);
+    }
+    lines.push('Someone else holds that handle. Find the real channel on youtube.com');
+    lines.push('and use Share channel -> Copy channel ID.');
   }
 
   if (failed.length > 0) {

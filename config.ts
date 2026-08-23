@@ -87,51 +87,54 @@ export const LEAGUE_SETTINGS: Record<
   nfl: {
     favorites: ['Lions', 'Seahawks', 'Eagles'],
     channels: [
-      // Shared with the college list, so these ids are already verified.
-      { name: 'ESPN', id: 'UCiWLfSweyRNmLpgEHekhoAg', handles: ['@ESPN'], priority: 1 },
-      { name: 'FOX Sports', id: 'UCwNqHDsnBCKT-olwJwIFyfg', handles: ['@FOXSports'], priority: 1 },
-      { name: 'CBS Sports', id: 'UCja8sZ2T4ylIqjggA1Zuukg', handles: ['@CBSSports'], priority: 1 },
-
-      // NOT yet verified. Run /api/resolve-channels?league=nfl to fill these
-      // in; the API decides which handle is real, we never guess an id.
-      { name: 'NFL', id: 'TODO_VERIFY', handles: ['@NFL'], priority: 3 },
+      // All resolved against the live YouTube API AND title-checked by
+      // /api/resolve-channels — a handle can resolve to the wrong channel
+      // entirely, so the resolved channel's title has to match too.
+      { name: 'NFL', id: 'UCDVYQ4Zhbm3S2dlz7P1GBDg', handles: ['@NFL'], priority: 3 },
       {
-        name: 'NFL on ESPN',
-        id: 'TODO_VERIFY',
-        handles: ['@NFLonESPN', '@ESPNNFL'],
+        name: 'NFL on FOX',
+        id: 'UCvQrivswRDGK0lZ_AcUHp8g',
+        handles: ['@NFLonFOX'],
         priority: 3,
       },
-      { name: 'NFL on FOX', id: 'TODO_VERIFY', handles: ['@NFLonFOX', '@NFLonFox'], priority: 3 },
       {
         name: 'NFL on CBS',
-        id: 'TODO_VERIFY',
-        handles: ['@NFLonCBS', '@NFLonCBSSports'],
+        id: 'UC7ZUfHFsuQcW7BkTHnXJtqw',
+        handles: ['@NFLonCBS'],
         priority: 3,
       },
       {
         name: 'NFL on NBC',
-        id: 'TODO_VERIFY',
-        handles: ['@NFLonNBC', '@SundayNightFootball', '@NBCSports'],
+        id: 'UCXn8eue3paGXJyI5UDQIyWg',
+        handles: ['@NFLonNBC'],
         priority: 3,
       },
-      // The three favorites' own channels — they post their own highlights,
-      // which is exactly what a favorites-first wall wants.
-      {
-        name: 'Detroit Lions',
-        id: 'TODO_VERIFY',
-        handles: ['@detroitlions', '@Lions'],
-        priority: 3,
-      },
+      // The favorites' own channels post their own highlights, which is
+      // exactly what a favorites-first wall wants.
       {
         name: 'Seattle Seahawks',
-        id: 'TODO_VERIFY',
-        handles: ['@Seahawks', '@seattleseahawks'],
+        id: 'UCzkFCRiMcOBeef8xcaqipmw',
+        handles: ['@Seahawks'],
         priority: 3,
       },
       {
         name: 'Philadelphia Eagles',
+        id: 'UCaogx6OHpsGg0zuGRKsjbtQ',
+        handles: ['@Eagles'],
+        priority: 3,
+      },
+      // Shared with the college list, already verified there.
+      { name: 'ESPN', id: 'UCiWLfSweyRNmLpgEHekhoAg', handles: ['@ESPN'], priority: 1 },
+      { name: 'FOX Sports', id: 'UCwNqHDsnBCKT-olwJwIFyfg', handles: ['@FOXSports'], priority: 1 },
+      { name: 'CBS Sports', id: 'UCja8sZ2T4ylIqjggA1Zuukg', handles: ['@CBSSports'], priority: 1 },
+
+      // NOT resolved. @Lions belongs to the Saitama Seibu Lions, a Japanese
+      // baseball team — it returned a perfectly valid id for entirely the
+      // wrong channel, which is why the resolver now title-checks every hit.
+      {
+        name: 'Detroit Lions',
         id: 'TODO_VERIFY',
-        handles: ['@PhiladelphiaEagles', '@Eagles'],
+        handles: ['@detroitlions', '@DetroitLionsNFL', '@TheDetroitLions'],
         priority: 3,
       },
     ],
