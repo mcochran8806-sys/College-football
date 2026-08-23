@@ -14,10 +14,15 @@
  * changed from C to U (UCxxxx -> UUxxxx). That's a pure string transform, so
  * discovering where to poll costs ZERO units.
  *
- * Steady-state math for a 12-hour Saturday (11 channels resolved, 1 pending):
+ * Steady-state math for a 12-hour game day, per league:
  *
  *   11 channels x 1 unit x 30 polls/hour (one per 2 min) x 12 hours
- *     = 3,960 units/day  (4,320 if the 12th resolves)
+ *     = 3,960 units/day, plus ~2 units/poll for duration lookups
+ *
+ * Both leagues sharing one key is fine on a normal weekend — college plays
+ * Saturday, the NFL plays Sunday — but running both walls hard on the same day
+ * would roughly double it and start crowding 10,000. Only the channels for the
+ * requested league are polled, so an idle league costs nothing.
  *
  * ...comfortably inside 10,000, with room for a second TV, a dev session, and
  * a few retries. Note the server-side 90s cache means the browser's 2-minute
@@ -28,7 +33,8 @@
  * ==========================================================================
  */
 
-import { HIGHLIGHT_CHANNELS, WALL, type HighlightChannel } from '../../config.js';
+import { LEAGUE_SETTINGS, WALL } from '../../config.js';
+import type { HighlightChannel, LeagueConfig } from '../../shared/leagues/types.js';
 import type { HighlightVideo } from '../../shared/types.js';
 import { fetchJson, redact, UpstreamError } from './http.js';
 
@@ -185,12 +191,15 @@ export interface FetchHighlightsResult {
  * resolved channel. Per-channel failures are logged and skipped so a single
  * bad channel can't empty the wall.
  */
-export async function fetchHighlights(apiKey: string): Promise<FetchHighlightsResult> {
+export async function fetchHighlights(
+  apiKey: string,
+  league: LeagueConfig,
+): Promise<FetchHighlightsResult> {
   const dayStart = easternDayStart().getTime();
   const unresolved: string[] = [];
   const resolved: Array<{ channel: HighlightChannel; playlistId: string }> = [];
 
-  for (const channel of HIGHLIGHT_CHANNELS) {
+  for (const channel of LEAGUE_SETTINGS[league.id].channels) {
     const playlistId = uploadsPlaylistId(channel.id);
     if (!playlistId) {
       unresolved.push(channel.name);

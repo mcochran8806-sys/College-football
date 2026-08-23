@@ -10,7 +10,9 @@
     "typecheck": "tsc -b",
     "resolve-channels": "node scripts/resolve-channels.mjs",
     "test:matcher": "node scripts/test-matcher.mjs",
-    "test:relevance": "node scripts/test-relevance.mjs"
+    "test:relevance": "node scripts/test-relevance.mjs",
+    "test:nfl": "node scripts/test-nfl.mjs",
+    "test": "npm run test:matcher && npm run test:relevance && npm run test:nfl"
   },
   "dependencies": {
     "react": "^18.3.1",

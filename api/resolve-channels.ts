@@ -14,10 +14,11 @@
  * This is not in any polling path — nothing calls it but a person.
  */
 
-import { CACHE_TTL_TEAMS, HIGHLIGHT_CHANNELS } from '../config.js';
+import { CACHE_TTL_TEAMS, LEAGUE_SETTINGS } from '../config.js';
+import type { HighlightChannel, LeagueConfig } from '../shared/leagues/types.js';
 import { cached } from './_lib/cache.js';
 import { fetchJson, redact } from './_lib/http.js';
-import type { ApiRequest, ApiResponse } from './_lib/types.js';
+import { leagueOf, type ApiRequest, type ApiResponse } from './_lib/types.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -53,9 +54,9 @@ async function lookup(handle: string, apiKey: string): Promise<{ id: string; tit
  * so rather than guessing one spelling per channel we let the API arbitrate a
  * short list. Costs 1 unit per handle actually tried.
  */
-async function resolveAll(apiKey: string): Promise<Resolved[]> {
+async function resolveAll(apiKey: string, channels: HighlightChannel[]): Promise<Resolved[]> {
   return Promise.all(
-    HIGHLIGHT_CHANNELS.map(async (channel): Promise<Resolved> => {
+    channels.map(async (channel): Promise<Resolved> => {
       const base: Resolved = {
         name: channel.name,
         tried: [],
@@ -87,13 +88,13 @@ async function resolveAll(apiKey: string): Promise<Resolved[]> {
 }
 
 /** Plain text, because a person reads this in a browser tab. */
-function render(rows: Resolved[]): string {
+function render(rows: Resolved[], league: LeagueConfig, channels: HighlightChannel[]): string {
   const lines: string[] = [];
   const ok = rows.filter((r) => r.resolved);
   const failed = rows.filter((r) => !r.resolved);
   const units = rows.reduce((n, r) => n + r.units, 0);
 
-  lines.push('CFB Saturday — YouTube channel ID resolver');
+  lines.push(`YouTube channel ID resolver — ${league.label}`);
   lines.push('='.repeat(70));
   lines.push('');
   lines.push(`Resolved ${ok.length} of ${rows.length} channels. Cost: ${units} quota units.`);
@@ -111,7 +112,7 @@ function render(rows: Resolved[]): string {
 
   lines.push('');
   lines.push('-'.repeat(70));
-  lines.push('PASTE THIS into HIGHLIGHT_CHANNELS in config.ts');
+  lines.push(`PASTE THIS into LEAGUE_SETTINGS.${league.id}.channels in config.ts`);
   lines.push('(or just send this whole page to Claude and it will do it)');
   lines.push('-'.repeat(70));
   lines.push('');
@@ -119,7 +120,7 @@ function render(rows: Resolved[]): string {
   for (const r of rows) {
     // A failed lookup must not throw away an id we already had.
     const id = r.resolved ?? r.configured ?? 'TODO_VERIFY';
-    const source = HIGHLIGHT_CHANNELS.find((c) => c.name === r.name);
+    const source = channels.find((c) => c.name === r.name);
     const handles = r.matched ? `['${r.matched}']` : `['${(source?.handles ?? []).join("', '")}']`;
     lines.push(
       `  { name: '${r.name}', id: '${id}', handles: ${handles}` +
@@ -140,7 +141,9 @@ function render(rows: Resolved[]): string {
   return lines.join('\n');
 }
 
-export default async function handler(_req: ApiRequest, res: ApiResponse): Promise<void> {
+export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
+  const league = leagueOf(req);
+  const channels = LEAGUE_SETTINGS[league.id].channels;
   const apiKey = process.env.YOUTUBE_API_KEY;
 
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
@@ -157,11 +160,11 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
 
   try {
     // Channel ids never change, so cache hard: a refresh can't burn quota.
-    const result = await cached<Resolved[]>('resolve-channels', CACHE_TTL_TEAMS, () =>
-      resolveAll(apiKey),
+    const result = await cached<Resolved[]>(`resolve-channels:${league.id}`, CACHE_TTL_TEAMS, () =>
+      resolveAll(apiKey, channels),
     );
     res.setHeader('Cache-Control', 's-maxage=86400');
-    res.status(200).send(render(result.value));
+    res.status(200).send(render(result.value, league, channels));
   } catch (err) {
     console.error('[api/resolve-channels] failed:', err);
     res.setHeader('Cache-Control', 'no-store');

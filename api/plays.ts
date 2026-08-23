@@ -11,14 +11,15 @@
  * churn and needs no database.
  */
 
-import { CACHE_TTL, DEBUG_DATE, ESPN, FAVORITE_TEAMS } from '../config.js';
+import { CACHE_TTL, DEBUG_DATE, LEAGUE_SETTINGS } from '../config.js';
+import type { LeagueConfig } from '../shared/leagues/types.js';
 import { favoriteInProgress } from '../shared/favorites.js';
 import type { Game, PlaysResponse, ScoringPlay } from '../shared/types.js';
 import { cached } from './_lib/cache.js';
 import { extractScoringPlays } from './_lib/espn.js';
 import { fetchEspnJson } from './_lib/http.js';
 import { isMock } from './_lib/mock.js';
-import { q, type ApiRequest, type ApiResponse } from './_lib/types.js';
+import { leagueOf, q, type ApiRequest, type ApiResponse } from './_lib/types.js';
 import { loadScoreboard } from './scoreboard.js';
 
 /** Guard rail: never fan out to more than this many summary calls per pass. */
@@ -29,21 +30,22 @@ const MAX_GAMES = 6;
  * that screen actually treats as a favorite. Falls back to the config defaults
  * when the param is absent.
  */
-function requestedFavorites(req: ApiRequest): string[] {
+function requestedFavorites(req: ApiRequest, league: LeagueConfig): string[] {
+  const fallback = LEAGUE_SETTINGS[league.id].favorites;
   const raw = q(req, 'favorites') ?? q(req, 'f');
-  if (!raw) return FAVORITE_TEAMS;
+  if (!raw) return fallback;
   const parsed = raw
     .split(',')
     .map((s) => s.trim())
     .filter((s) => s.length > 0 && s.length <= 60)
     .slice(0, 25);
-  return parsed.length > 0 ? parsed : FAVORITE_TEAMS;
+  return parsed.length > 0 ? parsed : fallback;
 }
 
-async function playsForGames(games: Game[]): Promise<ScoringPlay[]> {
+async function playsForGames(games: Game[], league: LeagueConfig): Promise<ScoringPlay[]> {
   const settled = await Promise.allSettled(
     games.map(async (game) => {
-      const url = `${ESPN.summary}?event=${encodeURIComponent(game.id)}`;
+      const url = `${league.espn.summary}?event=${encodeURIComponent(game.id)}`;
       const raw = await fetchEspnJson<unknown>(url);
       return extractScoringPlays(raw, game.id, game);
     }),
@@ -80,9 +82,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   res.setHeader('Cache-Control', 's-maxage=15, stale-while-revalidate=30');
 
   try {
-    const board = await loadScoreboard(/^\d{8}$/.test(DEBUG_DATE) ? DEBUG_DATE : null);
-    const favorites = requestedFavorites(req);
-    const targets = favoriteInProgress(board.games, favorites).slice(0, MAX_GAMES);
+    const league = leagueOf(req);
+    const board = await loadScoreboard(league, /^\d{8}$/.test(DEBUG_DATE) ? DEBUG_DATE : null);
+    const favorites = requestedFavorites(req, league);
+    const targets = favoriteInProgress(board.games, favorites, league).slice(0, MAX_GAMES);
     const polledGameIds = targets.map((g) => g.id);
 
     if (targets.length === 0) {
@@ -118,9 +121,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
 
     // Keyed on the games actually polled, so two screens with different
     // favorites can't share each other's feed.
-    const key = `plays:${polledGameIds.join(',')}`;
+    const key = `plays:${league.id}:${polledGameIds.join(',')}`;
     const result = await cached<ScoringPlay[]>(key, CACHE_TTL.plays, async () =>
-      chronological(await playsForGames(targets)),
+      chronological(await playsForGames(targets, league)),
     );
 
     res.status(200).json({

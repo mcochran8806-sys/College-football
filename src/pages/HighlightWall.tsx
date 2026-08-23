@@ -5,6 +5,7 @@ import ScoreCard from '../components/ScoreCard';
 import YouTubeStage from '../components/YouTubeStage';
 import { useBurnInShift } from '../hooks/useBurnInShift';
 import { useFavorites } from '../hooks/useFavorites';
+import { useLeague } from '../hooks/useLeague';
 import { useHighlightQueue } from '../hooks/useHighlightQueue';
 import { usePoll } from '../hooks/usePoll';
 import { useScoreCards } from '../hooks/useScoreCards';
@@ -21,10 +22,13 @@ import { getHighlights, getPlays, getScoreboard } from '../lib/api';
  *      scoreboard, so an empty queue never means a black screen.
  */
 export default function HighlightWall() {
-  const { teams: favorites } = useFavorites();
-  const scoreboard = usePoll(getScoreboard, INTERVALS.scoreboardPoll);
-  const highlights = usePoll(getHighlights, INTERVALS.highlightsPoll);
-  const loadPlays = useCallback(() => getPlays(favorites), [favorites]);
+  const league = useLeague();
+  const { teams: favorites } = useFavorites(league);
+  const loadScoreboard = useCallback(() => getScoreboard(league.id), [league]);
+  const loadHighlights = useCallback(() => getHighlights(league.id), [league]);
+  const loadPlays = useCallback(() => getPlays(favorites, league.id), [favorites, league]);
+  const scoreboard = usePoll(loadScoreboard, INTERVALS.scoreboardPoll);
+  const highlights = usePoll(loadHighlights, INTERVALS.highlightsPoll);
   const plays = usePoll(loadPlays, INTERVALS.playsPoll);
 
   const games = useMemo(() => scoreboard.data?.games ?? [], [scoreboard.data]);
@@ -34,6 +38,7 @@ export default function HighlightWall() {
     videos,
     games,
     favorites,
+    league,
   );
   const { activeCard, recentCards } = useScoreCards(plays.data);
 
@@ -54,10 +59,10 @@ export default function HighlightWall() {
   const hasVideo = current !== null;
 
   const filler = (() => {
-    if (recentCards.length === 0) return <CompactScoreboard games={games} favorites={favorites} />;
+    if (recentCards.length === 0) return <CompactScoreboard games={games} favorites={favorites} league={league} />;
     // Alternate: scoreboard, card, scoreboard, card…
     const slot = fillerIndex % (recentCards.length + 1);
-    if (slot === 0) return <CompactScoreboard games={games} favorites={favorites} />;
+    if (slot === 0) return <CompactScoreboard games={games} favorites={favorites} league={league} />;
     const play = recentCards[slot - 1];
     return <ScoreCard play={play} game={gameFor(play.gameId)} />;
   })();
@@ -114,7 +119,13 @@ export default function HighlightWall() {
         )}
       </div>
 
-      {!started && <TapToStart onStart={() => setStarted(true)} ready={hasVideo || games.length > 0} />}
+      {!started && (
+        <TapToStart
+          onStart={() => setStarted(true)}
+          ready={hasVideo || games.length > 0}
+          league={league}
+        />
+      )}
 
       {highlights.data?.quotaExhausted && (
         <div className="absolute right-[4%] top-[4%] z-30 rounded bg-close/20 px-3 py-1 text-lg font-semibold text-close">
@@ -130,7 +141,15 @@ export default function HighlightWall() {
  * needs exactly one tap in its whole twelve-hour run. After this it never asks
  * again.
  */
-function TapToStart({ onStart, ready }: { onStart: () => void; ready: boolean }) {
+function TapToStart({
+  onStart,
+  ready,
+  league,
+}: {
+  onStart: () => void;
+  ready: boolean;
+  league: { label: string };
+}) {
   useEffect(() => {
     // A Fire Stick remote's OK button arrives as a key event, not a click.
     const onKey = (e: KeyboardEvent) => {
@@ -152,7 +171,7 @@ function TapToStart({ onStart, ready }: { onStart: () => void; ready: boolean })
         — no further input needed.
       </span>
       <span className="pt-4 text-2xl text-field-700">
-        {ready ? 'Highlights ready' : 'Loading today’s slate…'}
+        {league.label} · {ready ? 'highlights ready' : 'loading today’s slate…'}
       </span>
     </button>
   );

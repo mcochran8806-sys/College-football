@@ -2,111 +2,141 @@
  * Single source of truth for both the browser bundle and the /api serverless
  * functions. Keep this file free of any Node- or DOM-specific API so it can be
  * imported from either side.
+ *
+ * Two leagues run from one deployment. Which one a screen shows comes from
+ * ?league= in its URL; everything league-specific lives under LEAGUE_SETTINGS
+ * here, and the mechanical parts (ESPN paths, alias tables, topic keywords)
+ * live in shared/leagues/.
  */
+
+import type { HighlightChannel, LeagueId } from './shared/leagues/types.js';
+
+export type { HighlightChannel, LeagueId };
 
 /**
- * Teams whose games sort to the top of the scoreboard, get polled for scoring
- * plays, and interrupt the highlight wall with a score card.
+ * Per-league favorites and highlight channels — the two things you'll actually
+ * edit.
  *
- * These are the DEFAULTS. A ?favorites= parameter in the URL overrides them
- * per screen — build one at /settings by clicking teams. See README.
+ * FAVORITES accept anything the alias table understands: abbreviations
+ * ("UGA", "DET"), city or school names ("Georgia Tech", "Detroit"), or
+ * nicknames ("Bama", "Seahawks"). A ?favorites= parameter in a screen's URL
+ * overrides these per screen — build one at /settings.
  *
- * Accepts anything the alias table understands: abbreviations ("UGA"), school
- * names ("Georgia Tech"), or nicknames ("Bama"). Matched case-insensitively
- * against ESPN's abbreviation / displayName / shortDisplayName / location.
+ * CHANNELS: `id` must be the 24-character UC... channel ID. `handles` are
+ * candidates for /api/resolve-channels to try in order; a wrong ID polls an
+ * empty playlist and fails silently, so nothing here is ever guessed.
  */
-export const FAVORITE_TEAMS = ['Georgia', 'Georgia Tech', 'Alabama'];
-
-/**
- * YouTube channels polled for highlight uploads.
- *
- * `id` MUST be the 24-character channel ID (starts with "UC"). The uploads
- * playlist is derived from it by swapping the second character C -> U, which
- * costs zero API calls.
- *
- * Any entry whose id is still TODO_VERIFY is skipped at runtime and logged
- * loudly — a wrong ID fails silently, so we refuse to guess. Run
- * `npm run resolve-channels` to fill these in from the handles below.
- */
-export interface HighlightChannel {
-  /** Human label, shown in logs and on the highlight wall's source badge. */
-  name: string;
-  /** 24-char UC... channel ID, or 'TODO_VERIFY' until resolved. */
-  id: string;
-  /**
-   * Candidate @handles, tried in order by /api/resolve-channels until one
-   * resolves. Networks rename their channels and the obvious handle is often
-   * wrong — @SECNetwork and @bigtennetwork both 404 — so we let the YouTube
-   * API decide which spelling is real instead of guessing.
-   */
-  handles: string[];
-  /** Favor this channel's clips when several match the same game. */
-  priority?: number;
-}
-
-export const HIGHLIGHT_CHANNELS: HighlightChannel[] = [
-  // Every id below was resolved against the live YouTube API by
-  // /api/resolve-channels — none were guessed. The handle that actually
-  // worked is kept so a future run can re-verify it.
-  { name: 'ESPN', id: 'UCiWLfSweyRNmLpgEHekhoAg', handles: ['@ESPN'], priority: 2 },
-  {
-    name: 'ESPN College Football',
-    id: 'UCzRWWsFjqHk1an4OnVPsl9g',
-    handles: ['@ESPNCFB'],
-    priority: 3,
-  },
-  { name: 'SEC Network', id: 'UC60q_WUDde_NK-ze3frvtiA', handles: ['@SEC'], priority: 3 },
-  {
-    name: 'Big Ten Football',
-    id: 'UCXnslB_TwYqScBRf4bPf3vA',
-    handles: ['@B1GFootball'],
-    priority: 3,
-  },
-  {
-    name: 'ACC Digital Network',
-    id: 'UCOhy7TcR1gGD8nQBqrF2FaA',
-    handles: ['@ACCDigitalNetwork'],
-    priority: 3,
-  },
-  {
-    name: 'Big 12 Conference',
-    id: 'UCLnfOCTbfqMy_3ah8OmTHEQ',
-    handles: ['@Big12Conference'],
-    priority: 3,
-  },
-  {
-    name: 'FOX College Football',
-    id: 'UCpwix-O6ceqMgdxhqIynzFA',
-    handles: ['@CFBONFOX'],
-    priority: 3,
-  },
-  { name: 'FOX Sports', id: 'UCwNqHDsnBCKT-olwJwIFyfg', handles: ['@FOXSports'], priority: 1 },
-  { name: 'CBS Sports', id: 'UCja8sZ2T4ylIqjggA1Zuukg', handles: ['@CBSSports'], priority: 1 },
-  { name: 'NCAA', id: 'UCOnOdMq78X8ifkIxnIoqfHQ', handles: ['@NCAA'], priority: 1 },
-  {
-    name: 'Mountain West',
-    id: 'UC-En6dgdJQw9sQxOtuRstJQ',
-    handles: ['@MountainWest'],
-    priority: 1,
-  },
-
-  // Unresolved: none of these handles exist. Skipped at runtime rather than
-  // polling a wrong id. Extra candidates added for the next resolver run; if
-  // they all fail too, grab the id from youtube.com via Share channel.
-  {
-    name: 'Sun Belt Conference',
-    id: 'TODO_VERIFY',
-    handles: [
-      '@SunBeltConf',
-      '@SunBeltSports',
-      '@TheSunBelt',
-      '@SunBeltFB',
-      '@SunBeltConference',
-      '@SunBelt',
+export const LEAGUE_SETTINGS: Record<
+  LeagueId,
+  { favorites: string[]; channels: HighlightChannel[] }
+> = {
+  cfb: {
+    favorites: ['Georgia', 'Georgia Tech', 'Alabama'],
+    channels: [
+      // All verified against the live YouTube API by /api/resolve-channels.
+      { name: 'ESPN', id: 'UCiWLfSweyRNmLpgEHekhoAg', handles: ['@ESPN'], priority: 2 },
+      {
+        name: 'ESPN College Football',
+        id: 'UCzRWWsFjqHk1an4OnVPsl9g',
+        handles: ['@ESPNCFB'],
+        priority: 3,
+      },
+      { name: 'SEC Network', id: 'UC60q_WUDde_NK-ze3frvtiA', handles: ['@SEC'], priority: 3 },
+      {
+        name: 'Big Ten Football',
+        id: 'UCXnslB_TwYqScBRf4bPf3vA',
+        handles: ['@B1GFootball'],
+        priority: 3,
+      },
+      {
+        name: 'ACC Digital Network',
+        id: 'UCOhy7TcR1gGD8nQBqrF2FaA',
+        handles: ['@ACCDigitalNetwork'],
+        priority: 3,
+      },
+      {
+        name: 'Big 12 Conference',
+        id: 'UCLnfOCTbfqMy_3ah8OmTHEQ',
+        handles: ['@Big12Conference'],
+        priority: 3,
+      },
+      {
+        name: 'FOX College Football',
+        id: 'UCpwix-O6ceqMgdxhqIynzFA',
+        handles: ['@CFBONFOX'],
+        priority: 3,
+      },
+      { name: 'FOX Sports', id: 'UCwNqHDsnBCKT-olwJwIFyfg', handles: ['@FOXSports'], priority: 1 },
+      { name: 'CBS Sports', id: 'UCja8sZ2T4ylIqjggA1Zuukg', handles: ['@CBSSports'], priority: 1 },
+      { name: 'NCAA', id: 'UCOnOdMq78X8ifkIxnIoqfHQ', handles: ['@NCAA'], priority: 1 },
+      {
+        name: 'Mountain West',
+        id: 'UC-En6dgdJQw9sQxOtuRstJQ',
+        handles: ['@MountainWest'],
+        priority: 1,
+      },
+      {
+        name: 'Sun Belt Conference',
+        id: 'TODO_VERIFY',
+        handles: ['@SunBeltConf', '@SunBeltSports', '@TheSunBelt', '@SunBeltFB', '@SunBelt'],
+        priority: 1,
+      },
     ],
-    priority: 1,
   },
-];
+
+  nfl: {
+    favorites: ['Lions', 'Seahawks', 'Eagles'],
+    channels: [
+      // Shared with the college list, so these ids are already verified.
+      { name: 'ESPN', id: 'UCiWLfSweyRNmLpgEHekhoAg', handles: ['@ESPN'], priority: 1 },
+      { name: 'FOX Sports', id: 'UCwNqHDsnBCKT-olwJwIFyfg', handles: ['@FOXSports'], priority: 1 },
+      { name: 'CBS Sports', id: 'UCja8sZ2T4ylIqjggA1Zuukg', handles: ['@CBSSports'], priority: 1 },
+
+      // NOT yet verified. Run /api/resolve-channels?league=nfl to fill these
+      // in; the API decides which handle is real, we never guess an id.
+      { name: 'NFL', id: 'TODO_VERIFY', handles: ['@NFL'], priority: 3 },
+      {
+        name: 'NFL on ESPN',
+        id: 'TODO_VERIFY',
+        handles: ['@NFLonESPN', '@ESPNNFL'],
+        priority: 3,
+      },
+      { name: 'NFL on FOX', id: 'TODO_VERIFY', handles: ['@NFLonFOX', '@NFLonFox'], priority: 3 },
+      {
+        name: 'NFL on CBS',
+        id: 'TODO_VERIFY',
+        handles: ['@NFLonCBS', '@NFLonCBSSports'],
+        priority: 3,
+      },
+      {
+        name: 'NFL on NBC',
+        id: 'TODO_VERIFY',
+        handles: ['@NFLonNBC', '@SundayNightFootball', '@NBCSports'],
+        priority: 3,
+      },
+      // The three favorites' own channels — they post their own highlights,
+      // which is exactly what a favorites-first wall wants.
+      {
+        name: 'Detroit Lions',
+        id: 'TODO_VERIFY',
+        handles: ['@detroitlions', '@Lions'],
+        priority: 3,
+      },
+      {
+        name: 'Seattle Seahawks',
+        id: 'TODO_VERIFY',
+        handles: ['@Seahawks', '@seattleseahawks'],
+        priority: 3,
+      },
+      {
+        name: 'Philadelphia Eagles',
+        id: 'TODO_VERIFY',
+        handles: ['@PhiladelphiaEagles', '@Eagles'],
+        priority: 3,
+      },
+    ],
+  },
+};
 
 /** Everything that ticks, in milliseconds. */
 export const INTERVALS = {
@@ -201,14 +231,3 @@ export const DEBUG_DATE = '';
 /** Team list cache: FBS membership changes about once a year. */
 export const CACHE_TTL_TEAMS = 86_400_000;
 
-/** ESPN's undocumented, unofficial endpoints. Schema can shift mid-season. */
-export const ESPN = {
-  scoreboard:
-    'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard',
-  summary:
-    'https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary',
-  teams:
-    'https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams',
-  /** groups=80 is FBS; limit=100 lifts the default ~17-game cap. BOTH required. */
-  params: { groups: '80', limit: '100' },
-} as const;

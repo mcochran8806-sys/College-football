@@ -6,13 +6,14 @@
  * when ESPN misbehaves.
  */
 
-import { CACHE_TTL, DEBUG_DATE, ESPN } from '../config.js';
+import { CACHE_TTL, DEBUG_DATE } from '../config.js';
+import type { LeagueConfig } from '../shared/leagues/types.js';
 import type { Game, ScoreboardResponse } from '../shared/types.js';
 import { cached } from './_lib/cache.js';
 import { shrinkScoreboard } from './_lib/espn.js';
 import { fetchEspnJson } from './_lib/http.js';
 import { isMock } from './_lib/mock.js';
-import { q, type ApiRequest, type ApiResponse } from './_lib/types.js';
+import { leagueOf, q, type ApiRequest, type ApiResponse } from './_lib/types.js';
 
 /** Accept only YYYYMMDD; anything else is dropped rather than forwarded. */
 function safeDate(input: string | undefined): string | null {
@@ -20,15 +21,19 @@ function safeDate(input: string | undefined): string | null {
   return /^\d{8}$/.test(input) ? input : null;
 }
 
-export function scoreboardUrl(dates: string | null): string {
-  const params = new URLSearchParams(ESPN.params);
-  // groups=80 (FBS) and limit=100 are both required. Without them ESPN quietly
-  // returns ~17 games instead of the full slate.
+export function scoreboardUrl(league: LeagueConfig, dates: string | null): string {
+  // For college, groups=80 (FBS) and limit=100 are both required — without
+  // them ESPN quietly returns ~17 games instead of the full slate. The NFL
+  // needs no group filter. Each league carries its own params.
+  const params = new URLSearchParams(league.espn.params);
   if (dates) params.set('dates', dates);
-  return `${ESPN.scoreboard}?${params.toString()}`;
+  return `${league.espn.scoreboard}?${params.toString()}`;
 }
 
-export async function loadScoreboard(dates: string | null): Promise<{
+export async function loadScoreboard(
+  league: LeagueConfig,
+  dates: string | null,
+): Promise<{
   games: Game[];
   stale: boolean;
   ageMs: number;
@@ -36,9 +41,12 @@ export async function loadScoreboard(dates: string | null): Promise<{
   mock: boolean;
 }> {
   if (isMock()) {
-    const { MOCK_SCOREBOARD } = await import('../fixtures/scoreboard.js');
+    const raw =
+      league.id === 'nfl'
+        ? (await import('../fixtures/nfl-scoreboard.js')).MOCK_NFL_SCOREBOARD
+        : (await import('../fixtures/scoreboard.js')).MOCK_SCOREBOARD;
     return {
-      games: shrinkScoreboard(MOCK_SCOREBOARD),
+      games: shrinkScoreboard(raw),
       stale: false,
       ageMs: 0,
       fetchedAt: new Date().toISOString(),
@@ -46,20 +54,25 @@ export async function loadScoreboard(dates: string | null): Promise<{
     };
   }
 
-  const url = scoreboardUrl(dates);
-  const result = await cached<Game[]>(`scoreboard:${dates ?? 'today'}`, CACHE_TTL.scoreboard, async () => {
-    const raw = await fetchEspnJson<unknown>(url);
-    return shrinkScoreboard(raw);
-  });
+  const url = scoreboardUrl(league, dates);
+  const result = await cached<Game[]>(
+    `scoreboard:${league.id}:${dates ?? 'today'}`,
+    CACHE_TTL.scoreboard,
+    async () => {
+      const raw = await fetchEspnJson<unknown>(url);
+      return shrinkScoreboard(raw);
+    },
+  );
 
   return { games: result.value, stale: result.stale, ageMs: result.ageMs, fetchedAt: result.fetchedAt, mock: false };
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
+  const league = leagueOf(req);
   const dates = safeDate(q(req, 'dates') ?? DEBUG_DATE ?? undefined);
 
   try {
-    const { games, stale, ageMs, fetchedAt, mock } = await loadScoreboard(dates);
+    const { games, stale, ageMs, fetchedAt, mock } = await loadScoreboard(league, dates);
 
     // The edge cache is what stops N televisions from becoming N origin hits.
     res.setHeader('Cache-Control', 's-maxage=15, stale-while-revalidate=30');

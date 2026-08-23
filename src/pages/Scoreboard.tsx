@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GAMES_PER_PAGE, INTERVALS, SLATE } from '../../config';
 import GameCard from '../components/GameCard';
 import ScoreboardHeader from '../components/ScoreboardHeader';
 import { useBurnInShift } from '../hooks/useBurnInShift';
 import { useFavorites } from '../hooks/useFavorites';
+import { useLeague } from '../hooks/useLeague';
 import { usePoll, useSecondsSince } from '../hooks/usePoll';
 import { getScoreboard } from '../lib/api';
 import { filterSlate, isFavorite, paginate, sortGames } from '../lib/sortGames';
@@ -15,14 +16,16 @@ import { filterSlate, isFavorite, paginate, sortGames } from '../lib/sortGames';
  * timer with a cross-fade. Nobody is holding a mouse.
  */
 export default function Scoreboard() {
-  const { data, updatedAt, failures } = usePoll(getScoreboard, INTERVALS.scoreboardPoll);
+  const league = useLeague();
+  const loadScoreboard = useCallback(() => getScoreboard(league.id), [league]);
+  const { data, updatedAt, failures } = usePoll(loadScoreboard, INTERVALS.scoreboardPoll);
   const secondsSince = useSecondsSince(updatedAt);
   const shift = useBurnInShift();
-  const { teams: favorites, source: favoritesSource } = useFavorites();
+  const { teams: favorites, source: favoritesSource } = useFavorites(league);
 
   const games = useMemo(
-    () => sortGames(filterSlate(data?.games ?? [], favorites), favorites),
-    [data, favorites],
+    () => sortGames(filterSlate(data?.games ?? [], favorites, league), favorites, league),
+    [data, favorites, league],
   );
   const pages = useMemo(() => {
     const all = paginate(games, GAMES_PER_PAGE);
@@ -72,11 +75,12 @@ export default function Scoreboard() {
           shownCount={pages.reduce((n, p) => n + p.length, 0)}
           favorites={favorites}
           favoritesSource={favoritesSource}
+          leagueLabel={league.label}
         />
 
         {games.length === 0 ? (
           <div className="flex flex-1 items-center justify-center text-3xl text-field-500">
-            {data ? 'No FBS games on the slate.' : 'Loading the slate…'}
+            {data ? `No ${league.label} games on the slate.` : 'Loading the slate…'}
           </div>
         ) : (
           <main
@@ -86,7 +90,7 @@ export default function Scoreboard() {
             }
           >
             {page.map((game) => (
-              <GameCard key={game.id} game={game} favorite={isFavorite(game, favorites)} />
+              <GameCard key={game.id} game={game} favorite={isFavorite(game, favorites, league)} />
             ))}
           </main>
         )}

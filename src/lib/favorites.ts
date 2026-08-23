@@ -1,11 +1,12 @@
-import { FAVORITE_TEAMS } from '../../config';
+import { LEAGUE_SETTINGS } from '../../config';
+import type { LeagueConfig } from '../../shared/leagues/types';
 
 /**
  * Where the favorites list comes from, in priority order:
  *
  *   1. ?favorites= (or the short ?f=) in the URL  — the source of truth
  *   2. localStorage — a convenience mirror, never load-bearing
- *   3. FAVORITE_TEAMS in config.ts — always present
+ *   3. LEAGUE_SETTINGS[league].favorites in config.ts — always present
  *
  * The URL wins because it's the only one of the three that survives a TV
  * browser clearing its storage, and because it lets the two screens run
@@ -14,7 +15,10 @@ import { FAVORITE_TEAMS } from '../../config';
  * fallback to the config defaults.
  */
 
-const STORAGE_KEY = 'cfb.favorites.v1';
+/** Storage is keyed per league so the two screens can't overwrite each other. */
+function storageKey(league: LeagueConfig): string {
+  return `cfb.favorites.v1.${league.id}`;
+}
 
 /** Both spellings work. ?f= exists because typing a URL on a TV remote is
  *  miserable and every character counts. */
@@ -42,18 +46,18 @@ export function favoritesFromUrl(search = window.location.search): string[] {
   return [];
 }
 
-function favoritesFromStorage(): string[] {
+function favoritesFromStorage(league: LeagueConfig): string[] {
   try {
-    return parseList(window.localStorage.getItem(STORAGE_KEY));
+    return parseList(window.localStorage.getItem(storageKey(league)));
   } catch {
     // Private mode, disabled storage, quota weirdness — all expected on a TV.
     return [];
   }
 }
 
-export function rememberFavorites(teams: string[]): void {
+export function rememberFavorites(teams: string[], league: LeagueConfig): void {
   try {
-    window.localStorage.setItem(STORAGE_KEY, teams.join(','));
+    window.localStorage.setItem(storageKey(league), teams.join(','));
   } catch {
     /* best effort only; the URL is what actually carries the setting */
   }
@@ -64,18 +68,18 @@ export interface ResolvedFavorites {
   source: 'url' | 'storage' | 'config';
 }
 
-export function resolveFavorites(): ResolvedFavorites {
+export function resolveFavorites(league: LeagueConfig): ResolvedFavorites {
   const fromUrl = favoritesFromUrl();
   if (fromUrl.length > 0) {
     // Mirror it so a later visit to the bare URL on this device still works.
-    rememberFavorites(fromUrl);
+    rememberFavorites(fromUrl, league);
     return { teams: fromUrl, source: 'url' };
   }
 
-  const fromStorage = favoritesFromStorage();
+  const fromStorage = favoritesFromStorage(league);
   if (fromStorage.length > 0) return { teams: fromStorage, source: 'storage' };
 
-  return { teams: [...FAVORITE_TEAMS], source: 'config' };
+  return { teams: [...LEAGUE_SETTINGS[league.id].favorites], source: 'config' };
 }
 
 /** Build the query string for a set of favorites. Uses the short key. */

@@ -13,7 +13,8 @@
 import { createServer } from 'vite';
 
 const server = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
-const { cfbRelevance, matchTitleToGame, isNonCfbContent, isHighlightReel } = await server.ssrLoadModule('/src/lib/matchTitle.ts');
+const { relevanceFor, matchTitleToGame, isOffTopic, isHighlightReel } = await server.ssrLoadModule('/src/lib/matchTitle.ts');
+const { CFB } = await server.ssrLoadModule('/shared/leagues/cfb.ts');
 const { shrinkScoreboard } = await server.ssrLoadModule('/api/_lib/espn.ts');
 const { MOCK_SCOREBOARD } = await server.ssrLoadModule('/fixtures/scoreboard.ts');
 const games = shrinkScoreboard(MOCK_SCOREBOARD);
@@ -47,12 +48,12 @@ const cases = [
 
 let pass = 0, fail = 0;
 for (const [title, want] of cases) {
-  const got = cfbRelevance(title, games);
+  const got = relevanceFor(title, games, CFB);
   const ok = got === want;
   ok ? pass++ : fail++;
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${String(got).padEnd(6)} want=${String(want).padEnd(6)} ${JSON.stringify(title).slice(0, 66)}`);
   if (!ok) {
-    console.log(`        nonCfb=${isNonCfbContent(title)} gameMatch=${!!matchTitleToGame(title, games)}`);
+    console.log(`        nonCfb=${isOffTopic(title, CFB)} gameMatch=${!!matchTitleToGame(title, games, CFB)}`);
   }
 }
 // --- isHighlightReel: an actual reel vs college football talk -------------

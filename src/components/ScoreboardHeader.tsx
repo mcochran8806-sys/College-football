@@ -13,6 +13,7 @@ interface Props {
   shownCount: number;
   favorites: string[];
   favoritesSource: 'url' | 'storage' | 'config';
+  leagueLabel: string;
 }
 
 export default function ScoreboardHeader({
@@ -26,6 +27,7 @@ export default function ScoreboardHeader({
   shownCount,
   favorites,
   favoritesSource,
+  leagueLabel,
 }: Props) {
   const freshness =
     secondsSinceUpdate === null ? 'connecting…' : `updated ${secondsSinceUpdate}s ago`;
@@ -38,6 +40,9 @@ export default function ScoreboardHeader({
     <header className="flex shrink-0 items-baseline justify-between pb-3">
       <div className="flex items-baseline gap-4">
         <h1 className="text-2xl font-semibold tracking-tight text-field-100">{longDate()}</h1>
+        <span className="rounded bg-field-800 px-2 py-0.5 text-base font-semibold uppercase tracking-wider text-field-300">
+          {leagueLabel}
+        </span>
         <span className="text-lg text-field-500">
           {shownCount < gameCount
             ? `${shownCount} of ${gameCount} games`

@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { WALL } from '../../config';
 import type { Game, HighlightVideo } from '../../shared/types';
+import type { LeagueConfig } from '../../shared/leagues/types';
 import {
-  cfbRelevance,
   isHighlightReel,
   matchTitleToGame,
+  relevanceFor,
   type Relevance,
 } from '../lib/matchTitle';
 import { isFavorite } from '../lib/sortGames';
@@ -29,7 +30,12 @@ export interface QueuedVideo extends HighlightVideo {
  * Neither set is persisted. Per the spec these run on TV browsers with
  * unpredictable storage, so session memory is the only state we trust.
  */
-export function useHighlightQueue(videos: HighlightVideo[], games: Game[], favorites: string[]) {
+export function useHighlightQueue(
+  videos: HighlightVideo[],
+  games: Game[],
+  favorites: string[],
+  league: LeagueConfig,
+) {
   const played = useRef<Set<string>>(new Set());
   const rejected = useRef<Set<string>>(new Set());
   const [version, setVersion] = useState(0);
@@ -40,12 +46,12 @@ export function useHighlightQueue(videos: HighlightVideo[], games: Game[], favor
     const annotated = videos
       .filter((v) => !played.current.has(v.videoId) && !rejected.current.has(v.videoId))
       .map<QueuedVideo>((v) => {
-        const match = matchTitleToGame(v.title, games);
+        const match = matchTitleToGame(v.title, games, league);
         return {
           ...v,
           game: match?.game ?? null,
-          favorite: match ? isFavorite(match.game, favorites) : false,
-          relevance: match ? 'game' : cfbRelevance(v.title, games),
+          favorite: match ? isFavorite(match.game, favorites, league) : false,
+          relevance: match ? 'game' : relevanceFor(v.title, games, league),
           reel: isHighlightReel(v.title),
         };
       })
@@ -75,7 +81,7 @@ export function useHighlightQueue(videos: HighlightVideo[], games: Game[], favor
       if (pub !== 0) return pub;
       return b.priority - a.priority;
     });
-  }, [videos, games, favorites, version]);
+  }, [videos, games, favorites, league, version]);
 
   const current = queue[0] ?? null;
 

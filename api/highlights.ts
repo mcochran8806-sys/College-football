@@ -10,12 +10,14 @@ import { CACHE_TTL } from '../config.js';
 import type { HighlightsResponse } from '../shared/types.js';
 import { cached, peek } from './_lib/cache.js';
 import { isMock } from './_lib/mock.js';
-import type { ApiRequest, ApiResponse } from './_lib/types.js';
+import { leagueOf, type ApiRequest, type ApiResponse } from './_lib/types.js';
 import { fetchHighlights, isQuotaExhausted, type FetchHighlightsResult } from './_lib/youtube.js';
 
-const CACHE_KEY = 'highlights';
 
-export default async function handler(_req: ApiRequest, res: ApiResponse): Promise<void> {
+
+export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
+  const league = leagueOf(req);
+  const cacheKey = `highlights:${league.id}`;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 's-maxage=90, stale-while-revalidate=180');
 
@@ -59,7 +61,7 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
 
   // Quota's gone for the day: serve whatever we last had rather than erroring.
   if (isQuotaExhausted()) {
-    const last = peek<FetchHighlightsResult>(CACHE_KEY);
+    const last = peek<FetchHighlightsResult>(cacheKey);
     res.status(200).json({
       videos: last?.value.videos ?? [],
       fetchedAt: last?.fetchedAt ?? new Date().toISOString(),
@@ -72,8 +74,8 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
   }
 
   try {
-    const result = await cached<FetchHighlightsResult>(CACHE_KEY, CACHE_TTL.highlights, () =>
-      fetchHighlights(apiKey),
+    const result = await cached<FetchHighlightsResult>(cacheKey, CACHE_TTL.highlights, () =>
+      fetchHighlights(apiKey, league),
     );
     res.status(200).json({
       videos: result.value.videos,

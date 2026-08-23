@@ -6,6 +6,9 @@
  * so the same handler code runs in both places with no adapter.
  */
 
+import { resolveLeague } from '../../shared/leagues/index.js';
+import type { LeagueConfig } from '../../shared/leagues/types.js';
+
 export interface ApiRequest {
   method?: string;
   url?: string;
@@ -22,6 +25,11 @@ export interface ApiResponse {
 }
 
 export type ApiHandler = (req: ApiRequest, res: ApiResponse) => unknown | Promise<unknown>;
+
+/** Resolve ?league= from a request, defaulting rather than erroring. */
+export function leagueOf(req: ApiRequest): LeagueConfig {
+  return resolveLeague(q(req, 'league'));
+}
 
 /** Read a query param that may arrive as string | string[]. */
 export function q(req: ApiRequest, key: string): string | undefined {

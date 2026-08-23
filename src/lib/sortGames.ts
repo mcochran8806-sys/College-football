@@ -1,10 +1,11 @@
 import { CLOSE_GAME, GAMES_PER_PAGE, SLATE } from '../../config';
 import { isFavoriteGame } from '../../shared/favorites';
+import type { LeagueConfig } from '../../shared/leagues/types';
 import type { Game } from '../../shared/types';
 
 /** favorites -> in progress -> upcoming -> final */
-function bucket(game: Game, favorites: string[]): number {
-  if (isFavoriteGame(game, favorites)) return 0;
+function bucket(game: Game, favorites: string[], league: LeagueConfig): number {
+  if (isFavoriteGame(game, favorites, league)) return 0;
   if (game.state === 'in') return 1;
   if (game.state === 'pre') return 2;
   return 3;
@@ -20,14 +21,14 @@ export function isCloseAndLate(game: Game): boolean {
   return Math.abs(home - away) <= CLOSE_GAME.margin;
 }
 
-export function isFavorite(game: Game, favorites: string[]): boolean {
-  return isFavoriteGame(game, favorites);
+export function isFavorite(game: Game, favorites: string[], league: LeagueConfig): boolean {
+  return isFavoriteGame(game, favorites, league);
 }
 
-export function sortGames(games: Game[], favorites: string[]): Game[] {
+export function sortGames(games: Game[], favorites: string[], league: LeagueConfig): Game[] {
   return [...games].sort((a, b) => {
-    const ba = bucket(a, favorites);
-    const bb = bucket(b, favorites);
+    const ba = bucket(a, favorites, league);
+    const bb = bucket(b, favorites, league);
     if (ba !== bb) return ba - bb;
 
     // Within favorites, live games outrank scheduled ones.
@@ -62,10 +63,10 @@ export function sortGames(games: Game[], favorites: string[]): Game[] {
  * Favorites always survive, whatever their state — the whole point of marking
  * a team is to see it whether it's mid-drive or kicking off in three hours.
  */
-export function filterSlate(games: Game[], favorites: string[]): Game[] {
+export function filterSlate(games: Game[], favorites: string[], league: LeagueConfig): Game[] {
   if (SLATE.mode === 'all') return games;
 
-  const favorite = (g: Game) => isFavoriteGame(g, favorites);
+  const favorite = (g: Game) => isFavoriteGame(g, favorites, league);
   const live = games.filter((g) => g.state === 'in');
 
   if (SLATE.mode === 'live-only') {

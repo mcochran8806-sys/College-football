@@ -6,12 +6,13 @@
  * than once a day.
  */
 
-import { CACHE_TTL_TEAMS, ESPN } from '../config.js';
+import { CACHE_TTL_TEAMS } from '../config.js';
+import type { LeagueConfig } from '../shared/leagues/types.js';
 import type { PickerTeam } from '../shared/types.js';
 import { cached } from './_lib/cache.js';
 import { fetchEspnJson } from './_lib/http.js';
 import { isMock } from './_lib/mock.js';
-import type { ApiRequest, ApiResponse } from './_lib/types.js';
+import { leagueOf, type ApiRequest, type ApiResponse } from './_lib/types.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -77,9 +78,11 @@ export function shrinkTeams(raw: any): PickerTeam[] {
  * ids. Shape is unverified beyond the top level, so the walk is recursive and
  * tolerant: any node carrying standings.entries[].team contributes.
  */
-async function fbsTeamIds(): Promise<Map<string, string | null>> {
+async function topDivisionTeamIds(league: LeagueConfig): Promise<Map<string, string | null>> {
   const raw = await fetchEspnJson<any>(
-    'https://site.api.espn.com/apis/v2/sports/football/college-football/standings?level=2',
+    `https://site.api.espn.com/apis/v2/sports/football/${
+      league.id === 'nfl' ? 'nfl' : 'college-football'
+    }/standings?level=2`,
     12_000,
   );
 
@@ -109,23 +112,27 @@ async function fbsTeamIds(): Promise<Map<string, string | null>> {
   return ids;
 }
 
-/** FBS is ~134 schools. Anything far outside this means the shape moved and
+/** Anything far outside the league's expected size means the shape moved and
  *  the filter should be ignored rather than trusted. */
-function plausibleFbsCount(n: number): boolean {
-  return n >= 100 && n <= 200;
+function plausibleCount(n: number, league: LeagueConfig): boolean {
+  return n >= league.expectedTeamCount.min && n <= league.expectedTeamCount.max;
 }
 
-export default async function handler(_req: ApiRequest, res: ApiResponse): Promise<void> {
+export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
+  const league = leagueOf(req);
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate=604800');
 
   try {
     if (isMock()) {
-      const { MOCK_SCOREBOARD } = await import('../fixtures/scoreboard.js');
+      const raw =
+        league.id === 'nfl'
+          ? (await import('../fixtures/nfl-scoreboard.js')).MOCK_NFL_SCOREBOARD
+          : (await import('../fixtures/scoreboard.js')).MOCK_SCOREBOARD;
       // Derive a picker list from the fixture slate so MOCK=1 has something
       // real to click on.
       const teams = new Map<string, PickerTeam>();
-      for (const ev of MOCK_SCOREBOARD.events) {
+      for (const ev of raw.events) {
         for (const c of ev.competitions[0].competitors) {
           const t = c.team as any;
           teams.set(String(t.id), {
@@ -148,24 +155,29 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
       return;
     }
 
-    // groups=80 restricts to FBS. Without it ESPN returns all 759 teams it
-    // knows about, down through Division III and NAIA, and the picker becomes
-    // a scroll past Adams State to find Alabama.
-    const url = `${ESPN.teams}?${new URLSearchParams({ groups: '80', limit: '1000' }).toString()}`;
-    const result = await cached<PickerTeam[]>('teams:fbs', CACHE_TTL_TEAMS, async () => {
-      // The teams list has the good logos and colors; standings has the FBS
-      // membership. Fetch both and intersect.
+    const url = `${league.espn.teams}?${new URLSearchParams({ limit: '1000' }).toString()}`;
+    const result = await cached<PickerTeam[]>(`teams:${league.id}`, CACHE_TTL_TEAMS, async () => {
+      // The teams list has the good logos and colors; standings has both the
+      // membership filter and the conference names. The NFL's teams endpoint
+      // already returns exactly 32, so only college needs the intersection —
+      // but both leagues want the conference labels for the picker.
       const [all, ids] = await Promise.all([
         fetchEspnJson<unknown>(url, 12_000).then(shrinkTeams),
-        fbsTeamIds().catch((err) => {
-          console.warn('[api/teams] standings lookup failed, serving unfiltered:', err);
+        topDivisionTeamIds(league).catch((err) => {
+          console.warn('[api/teams] standings lookup failed:', err);
           return new Map<string, string | null>();
         }),
       ]);
 
-      if (!plausibleFbsCount(ids.size)) {
+      // NFL: no filtering needed, just decorate with conference names.
+      if (!league.restrictTeamsViaStandings) {
+        return all.map((t) => ({ ...t, conference: ids.get(t.id) ?? null }));
+      }
+
+      if (!plausibleCount(ids.size, league)) {
         console.warn(
-          `[api/teams] FBS filter yielded ${ids.size} ids (expected 100-200); ` +
+          `[api/teams] division filter yielded ${ids.size} ids (expected ` +
+            `${league.expectedTeamCount.min}-${league.expectedTeamCount.max}); ` +
             `serving all ${all.length} teams unfiltered.`,
         );
         return all;
@@ -175,9 +187,9 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
         .filter((t) => ids.has(t.id))
         .map((t) => ({ ...t, conference: ids.get(t.id) ?? null }));
       // Don't let an id-format mismatch silently empty the picker.
-      if (!plausibleFbsCount(filtered.length)) {
+      if (!plausibleCount(filtered.length, league)) {
         console.warn(
-          `[api/teams] FBS filter matched only ${filtered.length} of ${all.length}; serving unfiltered.`,
+          `[api/teams] filter matched only ${filtered.length} of ${all.length}; serving unfiltered.`,
         );
         return all;
       }

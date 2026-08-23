@@ -14,6 +14,7 @@ import { createServer } from 'vite';
 
 const server = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
 const { matchTitleToGame, normalizeTitle } = await server.ssrLoadModule('/src/lib/matchTitle.ts');
+const { CFB } = await server.ssrLoadModule('/shared/leagues/cfb.ts');
 const { shrinkScoreboard } = await server.ssrLoadModule('/api/_lib/espn.ts');
 const { MOCK_SCOREBOARD } = await server.ssrLoadModule('/fixtures/scoreboard.ts');
 
@@ -43,7 +44,7 @@ const cases = [
 
 let pass = 0, fail = 0;
 for (const [title, expected] of cases) {
-  const m = matchTitleToGame(title, games);
+  const m = matchTitleToGame(title, games, CFB);
   const got = m ? label(m.game) : null;
   const ok = got === expected;
   ok ? pass++ : fail++;

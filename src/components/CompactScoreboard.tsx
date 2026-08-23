@@ -1,3 +1,4 @@
+import type { LeagueConfig } from '../../shared/leagues/types';
 import type { Game } from '../../shared/types';
 import { statusLine } from '../lib/format';
 import { isCloseAndLate, sortGames } from '../lib/sortGames';
@@ -6,6 +7,7 @@ import TeamLogo from './TeamLogo';
 interface Props {
   games: Game[];
   favorites: string[];
+  league: LeagueConfig;
   limit?: number;
 }
 
@@ -13,8 +15,8 @@ interface Props {
  * Dead-air filler for the highlight wall: when the video queue is empty and
  * there's no fresh scoring play to show, this beats a black screen.
  */
-export default function CompactScoreboard({ games, favorites, limit = 10 }: Props) {
-  const rows = sortGames(games.filter((g) => g.state !== 'pre'), favorites).slice(0, limit);
+export default function CompactScoreboard({ games, favorites, league, limit = 10 }: Props) {
+  const rows = sortGames(games.filter((g) => g.state !== 'pre'), favorites, league).slice(0, limit);
 
   return (
     <div className="animate-fade-up flex h-full w-full flex-col justify-center gap-4 bg-field-950 p-[4%]">

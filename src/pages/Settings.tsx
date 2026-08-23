@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PickerTeam } from '../../shared/types';
 import { usePoll } from '../hooks/usePoll';
 import { getTeams } from '../lib/api';
 import { favoritesParam, favoritesFromUrl, rememberFavorites } from '../lib/favorites';
-import { FAVORITE_TEAMS } from '../../config';
+import { LEAGUE_SETTINGS } from '../../config';
+import { LEAGUES, resolveLeague } from '../../shared/leagues/index';
+import type { LeagueId } from '../../shared/leagues/types';
 import { normalizeText } from '../lib/teamAliases';
 
 /**
@@ -15,22 +17,46 @@ import { normalizeText } from '../lib/teamAliases';
  * anything the TV browser does to its own storage.
  */
 export default function Settings() {
+  // Which league you're picking for. Starts from ?league= but is switchable
+  // here — this page is the one place you'd want to set up both TVs at once.
+  const [leagueId, setLeagueId] = useState<LeagueId>(() => {
+    try {
+      return resolveLeague(new URLSearchParams(window.location.search).get('league')).id;
+    } catch {
+      return 'cfb';
+    }
+  });
+  const league = LEAGUES[leagueId];
+
   // The team list changes about once a year, so one fetch is plenty.
-  const { data, updatedAt } = usePoll(getTeams, 6 * 60 * 60 * 1000);
+  const loadTeams = useCallback(() => getTeams(leagueId), [leagueId]);
+  const { data, updatedAt } = usePoll(loadTeams, 6 * 60 * 60 * 1000);
   const teams = useMemo(() => data?.teams ?? [], [data]);
 
   const [selected, setSelected] = useState<string[]>(() => {
     const fromUrl = favoritesFromUrl();
-    return fromUrl.length > 0 ? fromUrl : [...FAVORITE_TEAMS];
+    return fromUrl.length > 0 ? fromUrl : [...LEAGUE_SETTINGS.cfb.favorites];
   });
+
+  // Switching leagues swaps in that league's defaults rather than carrying
+  // college teams into an NFL URL, which would silently match nothing.
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    setSelected([...LEAGUE_SETTINGS[leagueId].favorites]);
+    setFilter('');
+  }, [leagueId]);
   const [filter, setFilter] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
 
   // Mirror to storage as you go, so opening the bare URL on THIS device
   // remembers. The generated URL is still what makes it stick on a TV.
   useEffect(() => {
-    rememberFavorites(selected);
-  }, [selected]);
+    rememberFavorites(selected, league);
+  }, [selected, league]);
 
   const selectedSet = useMemo(
     () => new Set(selected.map((s) => normalizeText(s))),
@@ -112,7 +138,12 @@ export default function Settings() {
   }
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const param = favoritesParam(selected);
+  // The default league sends no param, keeping the college URLs short.
+  const parts = [
+    leagueId === 'cfb' ? '' : `league=${leagueId}`,
+    favoritesParam(selected).replace(/^\?/, ''),
+  ].filter(Boolean);
+  const param = parts.length > 0 ? `?${parts.join('&')}` : '';
   const scoreboardUrl = `${origin}/${param}`;
   const wallUrl = `${origin}/highlights${param}`;
 
@@ -131,10 +162,27 @@ export default function Settings() {
     <div className="settings-screen min-h-full bg-field-950 px-6 py-10 text-field-100">
       <div className="mx-auto max-w-5xl">
         <header className="pb-8">
+          <div className="flex flex-wrap items-center gap-3 pb-4">
+            {(Object.keys(LEAGUES) as LeagueId[]).map((id) => (
+              <button
+                key={id}
+                onClick={() => setLeagueId(id)}
+                className={
+                  'rounded-full px-5 py-2 text-lg font-semibold transition-colors ' +
+                  (id === leagueId
+                    ? 'bg-close text-field-950'
+                    : 'border border-field-700 text-field-300 hover:border-field-500 hover:bg-field-850')
+                }
+              >
+                {LEAGUES[id].label}
+              </button>
+            ))}
+          </div>
           <h1 className="text-4xl font-bold tracking-tight">Pick your teams</h1>
           <p className="max-w-2xl pt-3 text-lg leading-relaxed text-field-500">
             Favorites sort to the top of the scoreboard, get polled for scoring plays,
-            and interrupt the highlight wall with a score card. Choose them here, then
+            and interrupt the highlight wall with a score card. Each league has its own
+            list. Choose them here, then
             point each TV at the URL below — that link <em>is</em> the setting, so it
             survives a TV clearing its own storage.
           </p>
@@ -274,7 +322,7 @@ export default function Settings() {
           Nothing here is saved to a server. The URL carries the setting; this browser
           also remembers your last pick as a convenience, but the TVs never depend on
           that. To change the defaults permanently, edit{' '}
-          <code className="text-field-300">FAVORITE_TEAMS</code> in{' '}
+          <code className="text-field-300">LEAGUE_SETTINGS.{leagueId}.favorites</code> in{' '}
           <code className="text-field-300">config.ts</code>.
         </footer>
       </div>

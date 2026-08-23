@@ -1,12 +1,47 @@
-# CFB Saturday — two-screen college football dashboard
+# Football Saturday — TV dashboards for college football and the NFL
 
-Two unattended TV screens driven by one backend:
+Unattended TV screens driven by one backend, for **two leagues from one
+deployment**:
 
 | Route | Screen | What it does |
 |---|---|---|
-| `/` | Scoreboard TV | Full FBS slate, favorites first, auto-paginating, 20s refresh |
+| `/` | Scoreboard TV | Full slate, favorites first, auto-paginating, 20s refresh |
 | `/highlights` | Highlight wall | Auto-rotating YouTube highlights + live scoring-play interstitials |
-| `/settings` | Team picker | Click favorites, get a URL to point each TV at (open on a phone/laptop) |
+| `/settings` | Team picker | Click favorites per league, get a URL to point each TV at |
+
+Add `?league=nfl` to any of them for the NFL; college football is the default.
+
+```
+/?f=Georgia,Georgia%20Tech,Alabama            college scoreboard
+/highlights?f=Georgia,Georgia%20Tech,Alabama  college wall
+/?league=nfl&f=Lions,Seahawks,Eagles          NFL scoreboard
+/highlights?league=nfl&f=Lions,Seahawks       NFL wall
+```
+
+Four TVs, one deployment, one YouTube key. An unrecognized `?league=` value
+falls back to college rather than erroring — a typo in a TV's URL must not
+blank the screen.
+
+## Two leagues, one codebase
+
+ESPN's site API is league-parameterized, so `/football/nfl/scoreboard` has the
+same shape as `/football/college-football/scoreboard`. Everything mechanical is
+shared; everything league-specific lives in `shared/leagues/`:
+
+| | College | NFL |
+|---|---|---|
+| Scoreboard params | `groups=80&limit=100` (both required) | `limit=100`, no group filter |
+| Team list | 759 from ESPN, filtered to 138 FBS via the standings tree | 32, no filtering needed |
+| Alias trap | `Miami` — two schools | `New York`, `Los Angeles` — two franchises each |
+| Off-topic | basketball, Little League, NBA, NFL | basketball, MLB, **and college football** |
+
+That last row matters: ESPN and CBS cover both leagues, so college content is
+exactly the contamination risk on a pro wall, and vice versa. Each league
+carries its own `offTopic` list.
+
+`npm run test` runs all three suites (75 cases). `npm run test:nfl` covers the
+city traps specifically — "New York vs Buffalo Highlights" must NOT resolve,
+because there is no way to know which New York team it means.
 
 Vite + React + TypeScript + Tailwind, deployed to Vercel's free tier. The
 browser never talks to ESPN or YouTube directly — everything goes through
@@ -49,7 +84,10 @@ a real touchdown.
 ```bash
 npm run build             # typecheck + production build
 npm run typecheck         # tsc only
-npm run test:matcher      # title-matching regression test (see below)
+npm run test              # all three suites (75 cases)
+npm run test:matcher      # college title matching
+npm run test:relevance    # wall relevance + reel detection
+npm run test:nfl          # NFL matching, city traps, favorites
 npm run resolve-channels  # one-time YouTube channel ID lookup
 ```
 
@@ -88,7 +126,8 @@ would be worse than leaving them blank. Resolve them once. Easiest way, no local
 `YOUTUBE_API_KEY` is set in Vercel, open:
 
 ```
-https://cfb-saturday.vercel.app/api/resolve-channels
+https://cfb-saturday.vercel.app/api/resolve-channels            college
+https://cfb-saturday.vercel.app/api/resolve-channels?league=nfl NFL
 ```
 
 It prints the real ids and a paste-ready config block. Cached 24h, so
@@ -319,8 +358,9 @@ Everything tunable lives in `config.ts`:
 
 | Setting | Default | Notes |
 |---|---|---|
-| `FAVORITE_TEAMS` | Georgia, Georgia Tech, Alabama | Abbreviations or names; resolved through the alias table |
-| `HIGHLIGHT_CHANNELS` | 12 channels | `TODO_VERIFY` entries are skipped, not guessed |
+| `LEAGUE_SETTINGS.cfb.favorites` | Georgia, Georgia Tech, Alabama | Abbreviations or names; resolved through the alias table |
+| `LEAGUE_SETTINGS.nfl.favorites` | Lions, Seahawks, Eagles | Nicknames are unique in the NFL; bare cities are not |
+| `LEAGUE_SETTINGS.<league>.channels` | 12 college / 11 NFL | `TODO_VERIFY` entries are skipped, not guessed |
 | `INTERVALS.scoreboardPoll` | 20s | Browser → `/api/scoreboard` |
 | `INTERVALS.highlightsPoll` | 2min | Browser → `/api/highlights` |
 | `INTERVALS.pageAdvance` | 15s | Scoreboard auto-advance |
