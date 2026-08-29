@@ -1,158 +1,71 @@
 /**
- * TEMPORARY diagnostic. Removed once the Highlightly integration is settled.
+ * TEMPORARY diagnostic, round 3. Removed once the integration is settled.
  *
- * Answers, in one request, everything I can't determine from the docs:
- *   - which auth header the direct platform wants (Bearer vs x-api-key)
- *   - what a highlight object actually contains for NFL and NCAA
- *   - what `source` values dominate (only youtube-sourced clips can drive the
- *     IFrame player's ENDED event, which is how the wall auto-advances)
- *   - what share are `embeddable`
- *   - what `category` values exist, and whether durations are exposed
+ * Settled by the previous rounds, so no longer re-tested (each probe run costs
+ * real quota against a 100/day free tier):
+ *   base URL   https://american-football.highlightly.net
+ *   auth       x-rapidapi-key  (yes, even on the direct platform — neither
+ *              Authorization: Bearer nor x-api-key works)
  *
- * The key is read from the environment and never echoed back.
+ * Open question this round: /highlights returns 200 with an empty `data` array
+ * for today. Is that no data yet, a wrong parameter, or a plan restriction?
+ * The response envelope has a `plan` key that should say.
+ *
+ * Costs ~6 calls per load.
  */
 
-import { redact } from './_lib/http.js';
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import { q } from './_lib/types.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-interface AuthVariant {
-  name: string;
-  headers?: (k: string) => Record<string, string>;
-  /** Some APIs take the key as a query parameter instead of a header. */
-  query?: (k: string) => string;
-}
+const BASE = 'https://american-football.highlightly.net';
 
-const AUTH_VARIANTS: AuthVariant[] = [
-  // A control: no credentials at all. If this returns the SAME 403 as the
-  // authenticated attempts, the problem is not the header format.
-  { name: '(none — control)', headers: () => ({}) },
-  { name: 'Authorization: Bearer', headers: (k) => ({ Authorization: `Bearer ${k}` }) },
-  { name: 'x-api-key', headers: (k) => ({ 'x-api-key': k }) },
-  { name: 'Authorization (raw key)', headers: (k) => ({ Authorization: k }) },
-  { name: 'apikey', headers: (k) => ({ apikey: k }) },
-  { name: 'api-key', headers: (k) => ({ 'api-key': k }) },
-  { name: 'x-rapidapi-key', headers: (k) => ({ 'x-rapidapi-key': k }) },
-  { name: 'query ?apikey=', query: (k) => `apikey=${encodeURIComponent(k)}` },
-  { name: 'query ?key=', query: (k) => `key=${encodeURIComponent(k)}` },
-];
-
-/** Base URLs to try — a 403 can also mean we are simply knocking on the wrong
- *  door. Each is probed with whichever auth variant works first. */
-const BASE_CANDIDATES = [
-  'https://american-football.highlightly.net',
-  'https://sport-highlights-api.highlightly.net/american-football',
-  'https://api.highlightly.net/american-football',
-  'https://highlightly.net/api/american-football',
-];
-
-function today(): string {
-  // Highlightly wants YYYY-MM-DD; use US Eastern, which is the football day.
-  const parts = new Intl.DateTimeFormat('en-CA', {
+function ymd(offsetDays = 0): string {
+  const d = new Date(Date.now() + offsetDays * 86_400_000);
+  return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/New_York',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(new Date());
-  return parts;
+  }).format(d);
 }
 
-async function attempt(url: string, headers: Record<string, string>) {
+async function call(path: string, key: string) {
+  const url = `${BASE}${path}`;
   const started = Date.now();
   try {
-    const res = await fetch(url, { headers, signal: AbortSignal.timeout(12_000) });
+    const res = await fetch(url, {
+      headers: { 'x-rapidapi-key': key },
+      signal: AbortSignal.timeout(12_000),
+    });
     const text = await res.text();
-    let body: any = null;
+    let json: any = null;
     try {
-      body = JSON.parse(text);
+      json = JSON.parse(text);
     } catch {
-      /* not JSON; the raw text below carries it */
+      /* raw below */
     }
 
-    // ALWAYS surface the body. An earlier version only kept `raw` when JSON
-    // parsing failed, which meant a JSON error body — exactly the thing that
-    // explains a 403 — was captured and then thrown away.
-    const interesting: Record<string, string> = {};
-    for (const h of [
-      'content-type',
-      'www-authenticate',
-      'x-ratelimit-limit',
-      'x-ratelimit-remaining',
-      'retry-after',
-      'server',
-      'cf-ray',
-    ]) {
-      const v = res.headers.get(h);
-      if (v) interesting[h] = v;
-    }
+    const data = Array.isArray(json?.data) ? json.data : null;
 
     return {
+      path,
       status: res.status,
       ms: Date.now() - started,
-      bytes: text.length,
-      json: body,
-      body: text.slice(0, 400),
-      headers: interesting,
+      // The plan object should report tier and remaining quota.
+      plan: json?.plan ?? null,
+      pagination: json?.pagination ?? null,
+      count: data?.length ?? null,
+      // First record in full — this is what the integration gets built against.
+      first: data?.[0] ?? null,
+      keysOfFirst: data?.[0] ? Object.keys(data[0]) : null,
+      // Raw tail only when something is off, capped so the page stays readable.
+      raw: data ? null : text.slice(0, 600),
     };
   } catch (err) {
-    return { status: 'THREW', ms: Date.now() - started, error: String(err).slice(0, 200) };
+    return { path, status: 'THREW', ms: Date.now() - started, error: String(err).slice(0, 200) };
   }
-}
-
-/** Pull the interesting shape out of whatever came back. */
-function describe(json: any) {
-  const items: any[] = Array.isArray(json)
-    ? json
-    : Array.isArray(json?.data)
-      ? json.data
-      : Array.isArray(json?.highlights)
-        ? json.highlights
-        : [];
-
-  if (items.length === 0) {
-    return { count: 0, topLevelKeys: Object.keys(json ?? {}).slice(0, 12) };
-  }
-
-  const tally = (fn: (h: any) => unknown) => {
-    const counts: Record<string, number> = {};
-    for (const h of items) {
-      const key = String(fn(h) ?? 'null');
-      counts[key] = (counts[key] ?? 0) + 1;
-    }
-    return counts;
-  };
-
-  const sample = items[0];
-  return {
-    count: items.length,
-    highlightKeys: Object.keys(sample ?? {}),
-    bySource: tally((h) => h?.source),
-    byEmbeddable: tally((h) => h?.embeddable),
-    byCategory: tally((h) => h?.category ?? h?.type),
-    byLeague: tally((h) => h?.match?.league?.name ?? h?.league?.name ?? h?.leagueName),
-    hasDuration: items.some((h) => h?.duration != null || h?.durationSeconds != null),
-    // Redacted sample so nothing sensitive leaks into the page.
-    sample: {
-      title: sample?.title ?? null,
-      url: sample?.url ?? null,
-      embedUrl: sample?.embedUrl ?? null,
-      embeddable: sample?.embeddable ?? null,
-      source: sample?.source ?? null,
-      channel: sample?.channel ?? null,
-      category: sample?.category ?? sample?.type ?? null,
-      duration: sample?.duration ?? null,
-      match: sample?.match
-        ? {
-            keys: Object.keys(sample.match).slice(0, 14),
-            league: sample.match?.league ?? null,
-            homeTeam: sample.match?.homeTeam?.name ?? sample.match?.homeTeam ?? null,
-            awayTeam: sample.match?.awayTeam?.name ?? sample.match?.awayTeam ?? null,
-          }
-        : null,
-    },
-  };
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
@@ -161,77 +74,34 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
 
   const key = process.env.HIGHLIGHTLY_API_KEY;
   if (!key) {
-    res.status(200).json({
-      error: 'HIGHLIGHTLY_API_KEY is not set on this deployment.',
-      fix: 'Vercel -> cfb-saturday -> Settings -> Environment Variables, then redeploy.',
-    });
+    res.status(200).json({ error: 'HIGHLIGHTLY_API_KEY is not set on this deployment.' });
     return;
   }
 
-  const date = q(req, 'date') ?? today();
-
-  // Step 1: which auth scheme, against which base URL? A 403 identical to the
-  // unauthenticated control means the header format is not the problem.
-  const auth: Record<string, unknown> = {};
-  let working: { name: string; base: string; headers: Record<string, string> } | null = null;
-
-  for (const base of BASE_CANDIDATES) {
-    for (const variant of AUTH_VARIANTS) {
-      const headers = variant.headers ? variant.headers(key) : {};
-      const qs = variant.query ? `&${variant.query(key)}` : '';
-      const url = `${base}/highlights?limit=1${qs}`;
-      const result = await attempt(url, headers);
-
-      auth[`${base}  |  ${variant.name}`] = {
-        status: result.status,
-        bytes: (result as any).bytes,
-        body: (result as any).body,
-        headers: (result as any).headers,
-        error: (result as any).error,
-      };
-
-      if (result.status === 200 && !working) working = { name: variant.name, base, headers };
-    }
-    // Once something works on a base, no need to try the rest.
-    if (working) break;
-  }
-
-  if (!working) {
-    res.status(200).json({
-      date,
-      verdict:
-        'No base URL + auth combination returned 200. The response bodies below ' +
-        'should say why — compare each against the "(none — control)" row: if they ' +
-        'match, the key is not being rejected for its format.',
-      keyLength: key.length,
-      keyPrefix: key.slice(0, 3) + '…',
-      attempts: auth,
-    });
+  const custom = q(req, 'path');
+  if (custom) {
+    // Escape hatch: probe one arbitrary path without another deploy.
+    res.status(200).json(await call(custom.startsWith('/') ? custom : `/${custom}`, key));
     return;
   }
 
-  // Step 2: what does the data actually look like?
-  const probes: Record<string, unknown> = {};
-  const urls: Record<string, string> = {
-    todayAll: `${working.base}/highlights?date=${date}&limit=40`,
-    todayNFL: `${working.base}/highlights?date=${date}&leagueName=NFL&limit=40`,
-    todayNCAA: `${working.base}/highlights?date=${date}&leagueName=NCAA&limit=40`,
-    leagues: `${working.base}/leagues?limit=40`,
-  };
+  const probes = [
+    // No date filter at all — should return the most recent regardless.
+    '/highlights?limit=5',
+    // Today, and the last two Saturdays, in case highlights simply lag.
+    `/highlights?date=${ymd(0)}&limit=5`,
+    `/highlights?date=${ymd(-7)}&limit=5`,
+    // Do matches work when highlights do not? Separates "no data" from
+    // "endpoint or plan problem".
+    `/matches?date=${ymd(0)}&limit=5`,
+    '/matches?limit=5',
+    // Leagues 404'd at /leagues last round; try the prefixed form the error
+    // message implied.
+    '/american-football/leagues?limit=5',
+  ];
 
-  for (const [name, url] of Object.entries(urls)) {
-    const r = await attempt(url, working.headers);
-    probes[name] =
-      r.status === 200
-        ? { status: 200, ms: r.ms, ...describe((r as any).json) }
-        : { status: r.status, ms: r.ms, body: (r as any).body, error: (r as any).error };
-  }
+  const results = [];
+  for (const p of probes) results.push(await call(p, key));
 
-  res.status(200).json({
-    date,
-    workingBase: working.base,
-    workingAuth: working.name,
-    probes,
-    note: redact('key never echoed'),
-  });
+  res.status(200).json({ today: ymd(0), lastWeek: ymd(-7), results });
 }
