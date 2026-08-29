@@ -75,13 +75,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     return;
   }
 
-  // ONE call. The question that decides whether Highlightly can replace the
-  // title matcher: how often is a clip attached to the wrong game?
-  //
-  // The first record from the previous round had the title "Houston Texans vs.
-  // Carolina Panthers | 2026 Preseason Week 3" attached to a match between
-  // Lenoir-Rhyne and Virginia Union — two Division II schools. If that rate is
-  // high, "clips arrive pre-matched" is not a benefit, it is a liability.
+  // ONE call. Everything now hinges on what an ESPN-sourced embedUrl actually
+  // is: 90% of clips come from ESPN, and only a YouTube embed can drive the
+  // IFrame player's ENDED event that the wall auto-advances on. Anything else
+  // needs a generic iframe and a timer.
   const raw = await fetch(`${BASE}/highlights?limit=40`, {
     headers: { 'x-rapidapi-key': key },
     signal: AbortSignal.timeout(12_000),
@@ -89,45 +86,51 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   const json: any = await raw.json().catch(() => null);
   const items: any[] = Array.isArray(json?.data) ? json.data : [];
 
-  /** Crude but sufficient: does either team name appear in the title? */
-  const squash = (v: unknown) => String(v ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const rows = items.map((h) => {
-    const title = squash(h?.title);
-    const home = h?.match?.homeTeam ?? {};
-    const away = h?.match?.awayTeam ?? {};
-    const names = [home?.name, home?.displayName, away?.name, away?.displayName]
-      .filter(Boolean)
-      .map(squash)
-      .filter((n) => n.length >= 4);
-    const hit = names.some((n) => title.includes(n));
-    return {
-      title: String(h?.title ?? '').slice(0, 72),
-      match: `${away?.displayName ?? '?'} @ ${home?.displayName ?? '?'}`,
-      league: h?.match?.league ?? null,
-      source: h?.source,
-      channel: h?.channel,
-      category: h?.category,
-      titleMentionsAMatchTeam: hit,
-    };
-  });
+  const bySource: Record<string, any[]> = {};
+  for (const h of items) {
+    const k = String(h?.source ?? 'null');
+    (bySource[k] ??= []).push(h);
+  }
 
-  const mismatches = rows.filter((x) => !x.titleMentionsAMatchTeam).length;
+  // Two full examples per source — the URLs are what matter.
+  const examples: Record<string, unknown[]> = {};
+  for (const [src, list] of Object.entries(bySource)) {
+    examples[src] = list.slice(0, 2).map((h) => ({
+      title: String(h?.title ?? '').slice(0, 60),
+      category: h?.category,
+      channel: h?.channel,
+      url: h?.url,
+      embedUrl: h?.embedUrl,
+      imgUrl: String(h?.imgUrl ?? '').slice(0, 90),
+      match: `${h?.match?.awayTeam?.displayName ?? '?'} @ ${h?.match?.homeTeam?.displayName ?? '?'}`,
+      league: h?.match?.league,
+      allKeys: Object.keys(h ?? {}),
+    }));
+  }
+
+  // Are any embedUrls missing entirely? A clip with no embedUrl is unplayable.
+  const missingEmbed = items.filter((h) => !h?.embedUrl).length;
 
   res.status(200).json({
     plan: json?.plan ?? null,
-    totalCount: json?.pagination?.totalCount ?? null,
-    sampled: rows.length,
-    titleDoesNotMentionEitherMatchTeam: mismatches,
-    mismatchRate: rows.length ? `${Math.round((mismatches / rows.length) * 100)}%` : 'n/a',
-    bySource: rows.reduce<Record<string, number>>((a, x) => {
-      a[String(x.source)] = (a[String(x.source)] ?? 0) + 1;
-      return a;
-    }, {}),
-    byCategory: rows.reduce<Record<string, number>>((a, x) => {
-      a[String(x.category)] = (a[String(x.category)] ?? 0) + 1;
-      return a;
-    }, {}),
-    rows,
+    sampled: items.length,
+    sourceCounts: Object.fromEntries(
+      Object.entries(bySource).map(([k, v]) => [k, v.length]),
+    ),
+    missingEmbedUrl: missingEmbed,
+    embedUrlHosts: [
+      ...new Set(
+        items
+          .map((h) => {
+            try {
+              return new URL(String(h?.embedUrl)).host;
+            } catch {
+              return 'INVALID/absent';
+            }
+          }),
+      ),
+    ],
+    examples,
   });
   return;
 
