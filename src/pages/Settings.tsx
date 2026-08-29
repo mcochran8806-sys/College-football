@@ -52,6 +52,16 @@ export default function Settings() {
   const [filter, setFilter] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
 
+  // OBS ticker options. Defaults mirror TICKER in config.ts, and anything left
+  // at its default is omitted from the generated URL to keep it short — these
+  // get typed into an OBS dialog by hand.
+  const [tickerStyle, setTickerStyle] = useState<'scroll' | 'flip'>('scroll');
+  const [tickerSpeed, setTickerSpeed] = useState(70);
+  const [tickerSolid, setTickerSolid] = useState(false);
+  const [tickerUpcoming, setTickerUpcoming] = useState(true);
+  const [tickerFinal, setTickerFinal] = useState(true);
+  const [tickerHeight, setTickerHeight] = useState(90);
+
   // Mirror to storage as you go, so opening the bare URL on THIS device
   // remembers. The generated URL is still what makes it stick on a TV.
   useEffect(() => {
@@ -147,6 +157,16 @@ export default function Settings() {
   const scoreboardUrl = `${origin}/${param}`;
   const wallUrl = `${origin}/highlights${param}`;
 
+  const tickerUrl = (() => {
+    const p = [...parts];
+    if (tickerStyle !== 'scroll') p.push(`style=${tickerStyle}`);
+    if (tickerSpeed !== 70) p.push(`speed=${tickerSpeed}`);
+    if (tickerSolid) p.push('bg=solid');
+    if (!tickerUpcoming) p.push('upcoming=false');
+    if (!tickerFinal) p.push('final=false');
+    return `${origin}/ticker${p.length > 0 ? `?${p.join('&')}` : ''}`;
+  })();
+
   async function copy(url: string, label: string) {
     try {
       await navigator.clipboard.writeText(url);
@@ -236,6 +256,110 @@ export default function Settings() {
           </p>
         </section>
 
+        {/* ---- OBS ticker builder ------------------------------------- */}
+        {/* scroll-mt clears the sticky summary box above, so jumping here does
+            not land the heading underneath it. */}
+        <section
+          id="obs-ticker"
+          className="mt-8 scroll-mt-64 rounded-2xl border border-field-800 bg-field-900 p-5"
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-3 pb-1">
+            <h2 className="text-2xl font-bold tracking-tight">OBS score ticker</h2>
+            <span className="text-base text-field-500">
+              Add as a Browser Source, {`1920 × ${tickerHeight}`}
+            </span>
+          </div>
+          <p className="max-w-2xl pb-5 text-base leading-relaxed text-field-500">
+            Uses the teams selected above. The page is transparent, so it composites
+            over whatever is beneath it in your scene — leave OBS's Custom CSS at its
+            default.
+          </p>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Choice
+              label="Style"
+              value={tickerStyle}
+              options={[
+                { value: 'scroll', label: 'Crawl' },
+                { value: 'flip', label: 'One at a time' },
+              ]}
+              onChange={(v) => setTickerStyle(v as 'scroll' | 'flip')}
+            />
+            <Choice
+              label="Background"
+              value={tickerSolid ? 'solid' : 'transparent'}
+              options={[
+                { value: 'transparent', label: 'Transparent' },
+                { value: 'solid', label: 'Filled bar' },
+              ]}
+              onChange={(v) => setTickerSolid(v === 'solid')}
+            />
+            <Choice
+              label="Show"
+              value={`${tickerUpcoming ? 'u' : ''}${tickerFinal ? 'f' : ''}` || 'live'}
+              options={[
+                { value: 'uf', label: 'Everything' },
+                { value: 'u', label: 'No finals' },
+                { value: 'live', label: 'Live only' },
+              ]}
+              onChange={(v) => {
+                setTickerUpcoming(v === 'uf' || v === 'u');
+                setTickerFinal(v === 'uf');
+              }}
+            />
+
+            <Slider
+              label="Crawl speed"
+              value={tickerSpeed}
+              min={30}
+              max={160}
+              step={5}
+              suffix=" px/sec"
+              disabled={tickerStyle === 'flip'}
+              onChange={setTickerSpeed}
+            />
+            <Slider
+              label="Source height"
+              value={tickerHeight}
+              min={50}
+              max={180}
+              step={10}
+              suffix=" px"
+              onChange={setTickerHeight}
+            />
+          </div>
+
+          <div className="pt-5">
+            <UrlRow label="OBS Browser Source" url={tickerUrl} onCopy={() => copy(tickerUrl, 'Ticker')} />
+          </div>
+
+          {/* Live preview at the real source height. The checkerboard makes
+              transparency visible the way OBS's canvas would. */}
+          <div className="pt-4">
+            <div className="pb-2 text-base text-field-500">
+              Preview at {tickerHeight}px — the checkerboard is what shows through
+            </div>
+            <div
+              className="w-full overflow-hidden rounded-lg"
+              style={{
+                height: tickerHeight,
+                backgroundColor: '#2f3a2f',
+                backgroundImage:
+                  'linear-gradient(45deg, #26302a 25%, transparent 25%), linear-gradient(-45deg, #26302a 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #26302a 75%), linear-gradient(-45deg, transparent 75%, #26302a 75%)',
+                backgroundSize: '18px 18px',
+                backgroundPosition: '0 0, 0 9px, 9px -9px, -9px 0px',
+              }}
+            >
+              <iframe
+                key={tickerUrl + tickerHeight}
+                src={tickerUrl}
+                title="OBS ticker preview"
+                className="h-full w-full border-0"
+              />
+            </div>
+          </div>
+        </section>
+
         <section className="pt-8">
           <input
             ref={filterRef}
@@ -275,7 +399,11 @@ export default function Settings() {
           )}
 
           {groups.map((group) => (
-            <section key={group.name} id={`conf-${encodeURIComponent(group.name)}`} className="pt-8">
+            <section
+              key={group.name}
+              id={`conf-${encodeURIComponent(group.name)}`}
+              className="scroll-mt-64 pt-8"
+            >
               <h3 className="pb-3 text-xl font-semibold uppercase tracking-[0.15em] text-field-500">
                 {group.name}
               </h3>
@@ -326,6 +454,84 @@ export default function Settings() {
           <code className="text-field-300">config.ts</code>.
         </footer>
       </div>
+    </div>
+  );
+}
+
+/** A compact segmented control — clearer than a <select> at a glance. */
+function Choice({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div>
+      <div className="pb-2 text-base text-field-500">{label}</div>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => (
+          <button
+            key={o.value}
+            onClick={() => onChange(o.value)}
+            className={
+              'rounded-lg px-3 py-2 text-base font-medium transition-colors ' +
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-close ' +
+              (o.value === value
+                ? 'bg-close text-field-950'
+                : 'border border-field-700 text-field-300 hover:border-field-500 hover:bg-field-850')
+            }
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Slider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  suffix,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  suffix: string;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className={disabled ? 'opacity-40' : ''}>
+      <div className="flex items-baseline justify-between pb-2 text-base text-field-500">
+        <span>{label}</span>
+        <span className="text-field-300">
+          {value}
+          {suffix}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-close"
+      />
     </div>
   );
 }

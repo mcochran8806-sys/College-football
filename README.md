@@ -377,6 +377,11 @@ treats as a favorite.
 scene as a **Browser Source**. It runs off the same `/api/scoreboard` as the TV
 screens, so there is no extra backend and no extra polling cost.
 
+**Build the URL at `/settings`** rather than by hand — there is an *OBS score
+ticker* card with the style, speed, background and height controls, a live
+preview over a checkerboard so you can see what composites through, and a copy
+button. It uses whichever teams and league are selected above it.
+
 ### Adding it to a scene
 
 1. In OBS: **Sources → + → Browser**
