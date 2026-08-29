@@ -21,16 +21,6 @@ import { q } from './_lib/types.js';
 
 const BASE = 'https://american-football.highlightly.net';
 
-function ymd(offsetDays = 0): string {
-  const d = new Date(Date.now() + offsetDays * 86_400_000);
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/New_York',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(d);
-}
-
 async function call(path: string, key: string) {
   const url = `${BASE}${path}`;
   const started = Date.now();
@@ -85,29 +75,60 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     return;
   }
 
-  // Endpoint and parameter names taken from the dashboard's API Demo, which
-  // is authoritative. Note `league`, NOT `leagueName` — an earlier round sent
-  // the wrong one. There is no /leagues endpoint for this sport at all.
-  const probes = [
-    // No filter — should return the most recent regardless of date.
-    '/highlights?limit=5',
-    // Today, and last Saturday, in case highlights simply lag the games.
-    `/highlights?date=${ymd(0)}&limit=5`,
-    `/highlights?date=${ymd(-7)}&limit=5`,
-    // With the correct league parameter this time.
-    `/highlights?league=NFL&limit=5`,
-    `/highlights?league=NCAA&limit=5`,
-    // Do matches work when highlights do not? Separates "no data yet" from
-    // "this plan does not include highlights".
-    `/matches?date=${ymd(0)}&limit=5`,
-    // Known-good control: /teams with the demo's own example parameters. If
-    // this returns rows and /highlights does not, the difference is the data,
-    // not the key.
-    '/teams?league=NFL&limit=5',
-  ];
+  // ONE call. The question that decides whether Highlightly can replace the
+  // title matcher: how often is a clip attached to the wrong game?
+  //
+  // The first record from the previous round had the title "Houston Texans vs.
+  // Carolina Panthers | 2026 Preseason Week 3" attached to a match between
+  // Lenoir-Rhyne and Virginia Union — two Division II schools. If that rate is
+  // high, "clips arrive pre-matched" is not a benefit, it is a liability.
+  const raw = await fetch(`${BASE}/highlights?limit=40`, {
+    headers: { 'x-rapidapi-key': key },
+    signal: AbortSignal.timeout(12_000),
+  });
+  const json: any = await raw.json().catch(() => null);
+  const items: any[] = Array.isArray(json?.data) ? json.data : [];
 
-  const results = [];
-  for (const p of probes) results.push(await call(p, key));
+  /** Crude but sufficient: does either team name appear in the title? */
+  const squash = (v: unknown) => String(v ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const rows = items.map((h) => {
+    const title = squash(h?.title);
+    const home = h?.match?.homeTeam ?? {};
+    const away = h?.match?.awayTeam ?? {};
+    const names = [home?.name, home?.displayName, away?.name, away?.displayName]
+      .filter(Boolean)
+      .map(squash)
+      .filter((n) => n.length >= 4);
+    const hit = names.some((n) => title.includes(n));
+    return {
+      title: String(h?.title ?? '').slice(0, 72),
+      match: `${away?.displayName ?? '?'} @ ${home?.displayName ?? '?'}`,
+      league: h?.match?.league ?? null,
+      source: h?.source,
+      channel: h?.channel,
+      category: h?.category,
+      titleMentionsAMatchTeam: hit,
+    };
+  });
 
-  res.status(200).json({ today: ymd(0), lastWeek: ymd(-7), results });
+  const mismatches = rows.filter((x) => !x.titleMentionsAMatchTeam).length;
+
+  res.status(200).json({
+    plan: json?.plan ?? null,
+    totalCount: json?.pagination?.totalCount ?? null,
+    sampled: rows.length,
+    titleDoesNotMentionEitherMatchTeam: mismatches,
+    mismatchRate: rows.length ? `${Math.round((mismatches / rows.length) * 100)}%` : 'n/a',
+    bySource: rows.reduce<Record<string, number>>((a, x) => {
+      a[String(x.source)] = (a[String(x.source)] ?? 0) + 1;
+      return a;
+    }, {}),
+    byCategory: rows.reduce<Record<string, number>>((a, x) => {
+      a[String(x.category)] = (a[String(x.category)] ?? 0) + 1;
+      return a;
+    }, {}),
+    rows,
+  });
+  return;
+
 }
