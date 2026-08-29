@@ -39,40 +39,6 @@ async function call(path: string, key: string) {
   return { status: res.status, json, raw: json ? null : text.slice(0, 200) };
 }
 
-function summarise(items: any[]) {
-  const playable = items.filter((h) => h?.embedUrl);
-  // Group by game so "clips per game" is visible, not just clips per page.
-  const games = new Set(items.map((h) => String(h?.match?.id ?? 'none')));
-  const playableGames = new Set(playable.map((h) => String(h?.match?.id ?? 'none')));
-  return {
-    clips: items.length,
-    playableClips: playable.length,
-    distinctGames: games.size,
-    gamesWithAPlayableClip: playableGames.size,
-    bySource: items.reduce<Record<string, number>>((a, h) => {
-      a[String(h?.source)] = (a[String(h?.source)] ?? 0) + 1;
-      return a;
-    }, {}),
-    // How recent is the newest clip? The college samples were all 2025
-    // season, and a wall needs current-season coverage to be useful.
-    newestGameDates: [
-      ...new Set(items.map((h) => String(h?.match?.date ?? '').slice(0, 10))),
-    ]
-      .filter(Boolean)
-      .sort()
-      .reverse()
-      .slice(0, 5),
-    playableSample: playable.slice(0, 4).map((h) => ({
-      title: String(h?.title ?? '').slice(0, 60),
-      category: h?.category,
-      source: h?.source,
-      channel: h?.channel,
-      embedUrl: h?.embedUrl,
-      game: `${h?.match?.awayTeam?.displayName ?? '?'} @ ${h?.match?.homeTeam?.displayName ?? '?'}`,
-    })),
-  };
-}
-
 export default async function handler(_req: ApiRequest, res: ApiResponse): Promise<void> {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
@@ -85,42 +51,69 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
 
   // Real FBS programs: the user's three favorites plus two blue-bloods that
   // are certain to be filmed if anything is.
-  // NFL favorites. My earlier "leagueName=NFL returns 0" used the same
-  // unfiltered method that proved wrong for college, so it needs re-testing
-  // per team before any recommendation.
-  const teams = [
-    'Detroit Lions',
-    'Seattle Seahawks',
-    'Philadelphia Eagles',
-    'Kansas City Chiefs',
-  ];
+  // NFL returned zero for all four favorites via homeTeamDisplayName, and
+  // zero via leagueName=NFL. Two methods agreeing is decent evidence, but both
+  // of my previous conclusions died of bad methodology, so rule out the
+  // remaining explanation: that NFL displayNames are simply stored in a form
+  // my query strings do not match.
+  const out: Record<string, unknown> = {};
 
-  const perTeam: Record<string, unknown> = {};
-  for (const team of teams) {
-    const enc = encodeURIComponent(team);
-    // A team appears as home in some games and away in others; check both.
-    const home = await call(`/highlights?homeTeamDisplayName=${enc}&limit=40`, key);
-    const away = await call(`/highlights?awayTeamDisplayName=${enc}&limit=40`, key);
+  // 1. What does the API itself call NFL teams?
+  const teamsRes = await call('/teams?league=NFL', key);
+  const teamList: any[] = Array.isArray(teamsRes.json)
+    ? teamsRes.json
+    : Array.isArray(teamsRes.json?.data)
+      ? teamsRes.json.data
+      : [];
+  out.nflTeams = {
+    status: teamsRes.status,
+    count: teamList.length,
+    exactNames: teamList.slice(0, 6).map((t) => ({
+      id: t?.id,
+      name: t?.name,
+      displayName: t?.displayName,
+      abbreviation: t?.abbreviation,
+      league: t?.league,
+    })),
+    raw: teamList.length === 0 ? teamsRes.raw : undefined,
+  };
 
-    const items = [
-      ...(Array.isArray(home.json?.data) ? home.json.data : []),
-      ...(Array.isArray(away.json?.data) ? away.json.data : []),
-    ];
-
-    perTeam[team] = {
-      status: `${home.status}/${away.status}`,
-      totalCount: {
-        home: home.json?.pagination?.totalCount ?? null,
-        away: away.json?.pagination?.totalCount ?? null,
-      },
-      ...summarise(items),
-      raw: items.length === 0 ? (home.raw ?? away.raw) : undefined,
-    };
+  // 2. Retry highlights using the API's OWN strings and ids, not mine.
+  const probeTeams = teamList.slice(0, 3);
+  const retries: unknown[] = [];
+  for (const t of probeTeams) {
+    const byName = await call(
+      `/highlights?homeTeamDisplayName=${encodeURIComponent(String(t?.displayName))}&limit=40`,
+      key,
+    );
+    const byId = await call(`/highlights?homeTeamId=${encodeURIComponent(String(t?.id))}&limit=40`, key);
+    retries.push({
+      team: t?.displayName,
+      id: t?.id,
+      byDisplayName: byName.json?.pagination?.totalCount ?? byName.status,
+      byTeamId: byId.json?.pagination?.totalCount ?? byId.status,
+    });
   }
+  out.retriesWithApiOwnStrings = retries;
 
-  res.status(200).json({
-    question:
-      'For real FBS teams, how many PLAYABLE clips exist, and across how many distinct games?',
-    perTeam,
-  });
+  // 3. Do NFL matches exist at all? If there are matches but no highlights,
+  //    that is a coverage gap. If there are no matches either, the API simply
+  //    does not carry the NFL despite the product name.
+  const nflMatches = await call('/matches?league=NFL&limit=5', key);
+  out.nflMatches = {
+    status: nflMatches.status,
+    totalCount: nflMatches.json?.pagination?.totalCount ?? null,
+    sample: (Array.isArray(nflMatches.json?.data) ? nflMatches.json.data : [])
+      .slice(0, 3)
+      .map((m: any) => ({
+        id: m?.id,
+        date: m?.date,
+        game: `${m?.awayTeam?.displayName} @ ${m?.homeTeam?.displayName}`,
+        league: m?.league,
+      })),
+  };
+
+  res.status(200).json(out);
+  return;
+
 }
