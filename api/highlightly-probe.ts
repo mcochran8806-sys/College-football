@@ -18,12 +18,34 @@ import { q } from './_lib/types.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const BASE = 'https://american-football.highlightly.net';
+interface AuthVariant {
+  name: string;
+  headers?: (k: string) => Record<string, string>;
+  /** Some APIs take the key as a query parameter instead of a header. */
+  query?: (k: string) => string;
+}
 
-const AUTH_VARIANTS: Array<{ name: string; headers: (k: string) => Record<string, string> }> = [
+const AUTH_VARIANTS: AuthVariant[] = [
+  // A control: no credentials at all. If this returns the SAME 403 as the
+  // authenticated attempts, the problem is not the header format.
+  { name: '(none — control)', headers: () => ({}) },
   { name: 'Authorization: Bearer', headers: (k) => ({ Authorization: `Bearer ${k}` }) },
   { name: 'x-api-key', headers: (k) => ({ 'x-api-key': k }) },
   { name: 'Authorization (raw key)', headers: (k) => ({ Authorization: k }) },
+  { name: 'apikey', headers: (k) => ({ apikey: k }) },
+  { name: 'api-key', headers: (k) => ({ 'api-key': k }) },
+  { name: 'x-rapidapi-key', headers: (k) => ({ 'x-rapidapi-key': k }) },
+  { name: 'query ?apikey=', query: (k) => `apikey=${encodeURIComponent(k)}` },
+  { name: 'query ?key=', query: (k) => `key=${encodeURIComponent(k)}` },
+];
+
+/** Base URLs to try — a 403 can also mean we are simply knocking on the wrong
+ *  door. Each is probed with whichever auth variant works first. */
+const BASE_CANDIDATES = [
+  'https://american-football.highlightly.net',
+  'https://sport-highlights-api.highlightly.net/american-football',
+  'https://api.highlightly.net/american-football',
+  'https://highlightly.net/api/american-football',
 ];
 
 function today(): string {
@@ -46,14 +68,33 @@ async function attempt(url: string, headers: Record<string, string>) {
     try {
       body = JSON.parse(text);
     } catch {
-      /* keep raw */
+      /* not JSON; the raw text below carries it */
     }
+
+    // ALWAYS surface the body. An earlier version only kept `raw` when JSON
+    // parsing failed, which meant a JSON error body — exactly the thing that
+    // explains a 403 — was captured and then thrown away.
+    const interesting: Record<string, string> = {};
+    for (const h of [
+      'content-type',
+      'www-authenticate',
+      'x-ratelimit-limit',
+      'x-ratelimit-remaining',
+      'retry-after',
+      'server',
+      'cf-ray',
+    ]) {
+      const v = res.headers.get(h);
+      if (v) interesting[h] = v;
+    }
+
     return {
       status: res.status,
       ms: Date.now() - started,
       bytes: text.length,
       json: body,
-      raw: body ? null : text.slice(0, 300),
+      body: text.slice(0, 400),
+      headers: interesting,
     };
   } catch (err) {
     return { status: 'THREW', ms: Date.now() - started, error: String(err).slice(0, 200) };
@@ -129,22 +170,42 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
 
   const date = q(req, 'date') ?? today();
 
-  // Step 1: which auth header works? One cheap call each.
+  // Step 1: which auth scheme, against which base URL? A 403 identical to the
+  // unauthenticated control means the header format is not the problem.
   const auth: Record<string, unknown> = {};
-  let working: { name: string; headers: Record<string, string> } | null = null;
+  let working: { name: string; base: string; headers: Record<string, string> } | null = null;
 
-  for (const variant of AUTH_VARIANTS) {
-    const headers = variant.headers(key);
-    const result = await attempt(`${BASE}/highlights?limit=1`, headers);
-    auth[variant.name] = { status: result.status, bytes: result.bytes, raw: result.raw };
-    if (result.status === 200 && !working) working = { name: variant.name, headers };
+  for (const base of BASE_CANDIDATES) {
+    for (const variant of AUTH_VARIANTS) {
+      const headers = variant.headers ? variant.headers(key) : {};
+      const qs = variant.query ? `&${variant.query(key)}` : '';
+      const url = `${base}/highlights?limit=1${qs}`;
+      const result = await attempt(url, headers);
+
+      auth[`${base}  |  ${variant.name}`] = {
+        status: result.status,
+        bytes: (result as any).bytes,
+        body: (result as any).body,
+        headers: (result as any).headers,
+        error: (result as any).error,
+      };
+
+      if (result.status === 200 && !working) working = { name: variant.name, base, headers };
+    }
+    // Once something works on a base, no need to try the rest.
+    if (working) break;
   }
 
   if (!working) {
     res.status(200).json({
       date,
-      verdict: 'No auth variant returned 200 — see statuses below.',
-      auth,
+      verdict:
+        'No base URL + auth combination returned 200. The response bodies below ' +
+        'should say why — compare each against the "(none — control)" row: if they ' +
+        'match, the key is not being rejected for its format.',
+      keyLength: key.length,
+      keyPrefix: key.slice(0, 3) + '…',
+      attempts: auth,
     });
     return;
   }
@@ -152,24 +213,24 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   // Step 2: what does the data actually look like?
   const probes: Record<string, unknown> = {};
   const urls: Record<string, string> = {
-    todayAll: `${BASE}/highlights?date=${date}&limit=40`,
-    todayNFL: `${BASE}/highlights?date=${date}&leagueName=NFL&limit=40`,
-    todayNCAA: `${BASE}/highlights?date=${date}&leagueName=NCAA&limit=40`,
-    leagues: `${BASE}/leagues?limit=40`,
+    todayAll: `${working.base}/highlights?date=${date}&limit=40`,
+    todayNFL: `${working.base}/highlights?date=${date}&leagueName=NFL&limit=40`,
+    todayNCAA: `${working.base}/highlights?date=${date}&leagueName=NCAA&limit=40`,
+    leagues: `${working.base}/leagues?limit=40`,
   };
 
   for (const [name, url] of Object.entries(urls)) {
     const r = await attempt(url, working.headers);
     probes[name] =
       r.status === 200
-        ? { status: 200, ms: r.ms, ...describe(r.json) }
-        : { status: r.status, ms: r.ms, raw: r.raw, error: (r as any).error };
+        ? { status: 200, ms: r.ms, ...describe((r as any).json) }
+        : { status: r.status, ms: r.ms, body: (r as any).body, error: (r as any).error };
   }
 
   res.status(200).json({
     date,
+    workingBase: working.base,
     workingAuth: working.name,
-    authAttempts: auth,
     probes,
     note: redact('key never echoed'),
   });
