@@ -550,58 +550,67 @@ Played-clip and seen-play state is session memory only.
 
 ---
 
-## Evaluated and rejected: Highlightly
+## Highlightly: viable for college, empty for the NFL
 
-Highlightly's NFL & NCAA API was evaluated as a replacement for the YouTube
-channel polling, across five probe rounds against the live API. It is not
-usable for a video wall. Recording why, so it is not re-investigated:
+Highlightly's NFL & NCAA API was evaluated over seven probe rounds against the
+live API. Summary: **usable for college football, not for the NFL.**
 
-**NFL returns nothing.** `/highlights?leagueName=NFL` responds 200 with
-`totalCount: 0`. There are no NFL highlights in the API at all.
+### College — good, when queried per team
 
-**NCAA returns 40 records, 4 playable.**
+The mistake that nearly buried this: measuring from an unfiltered page of a
+25,550-record collection, which is dominated by whichever two games sit at the
+top. Queried per team via `homeTeamDisplayName` / `awayTeamDisplayName`, the
+picture is completely different:
 
-| Source | Records | With an `embedUrl` |
-|---|---|---|
-| espn | 36 | **0** |
-| youtube | 4 | 4 |
+| Team | Clips | Playable | Games | Games with a playable clip |
+|---|---|---|---|---|
+| Ohio State | 80 | 69 | 12 | 12 |
+| Texas | 80 | 42 | 10 | 9 |
+| Georgia Tech | 80 | 35 | 10 | 10 |
+| Georgia | 80 | 9 | 6 | 5 |
+| Alabama | 80 | 5 | 5 | 5 |
 
-ESPN-sourced records carry only `url: https://www.espn.com/video/clip?id=...`
-and a thumbnail. Playing them would need either framing espn.com (blocked) or
-extracting the stream (DRM/geo-restricted, out of scope here). The spec itself
-notes a hosting platform "can impose geo restrictions or prevent direct
-embedding".
+Nearly every game carries at least one playable, correctly attributed
+`match-highlights` clip, embedded from YouTube channels (ESPN College Football,
+CFB ON FOX, ACC Digital Network, Big Ten Network) that work with the existing
+IFrame player unchanged. Because clips arrive with `match.homeTeam` and
+`match.awayTeam` attached, no title matching is required for them.
 
-**Two of those four playable clips are misattributed.** "Houston Texans vs.
-Carolina Panthers" is filed under *Virginia Union Panthers @ Lenoir-Rhyne
-Bears*; "LA Rams vs. LA Chargers" under *Marist Red Foxes @ New Haven
-Chargers*. Their cross-league matcher collides on nicknames — the exact failure
-`teamAliases` and `AMBIGUOUS_TOKENS` prevent here. Effective yield: **2 usable
-clips in 40**.
+Some ESPN-sourced clips also carry an `embedUrl`, as a direct MP4 on
+`media.video-cdn.espn.com`.
 
-**Per-match queries return nothing.** `/highlights?matchId=` for finished games
-gives `totalCount: 0`. And `/matches?league=NCAA` returns Division II and FCS
-fixtures (Delta State, Northeastern State, UAlbany, William & Mary), not the
-FBS slate.
+### NFL — no video at all
 
-A paid tier lifts the free plan's row limit but fixes none of this: `embedUrl`
-is null because ESPN does not offer embeds, not because of a paywall, and the
-misattribution is a data-quality problem.
+Verified three ways, the last using the API's own primary keys:
 
-### Facts worth keeping, if anyone revisits
+- `leagueName=NFL` on `/highlights` -> `totalCount: 0`
+- `homeTeamDisplayName` for Lions, Seahawks, Eagles, Chiefs -> 0 each
+- The API's own `displayName` strings **and** numeric `homeTeamId`
+  (Chiefs 92732, Bears 92733, Dolphins 92735) -> 0 each
+
+Meanwhile `/teams?league=NFL` returns 34 teams and `/matches?league=NFL`
+returns `totalCount: 2027` with real fixtures. So the NFL side carries
+schedules and rosters but no highlights.
+
+### Access patterns and gotchas
 
 - Base URL `https://american-football.highlightly.net`; auth is the
   **`x-rapidapi-key`** header even on the direct platform — `Authorization:
   Bearer` and `x-api-key` both 403.
+- **Query per team, not per page.** `/highlights` supports `matchId`,
+  `homeTeamId`, `homeTeamName`, `homeTeamDisplayName` and the away equivalents.
+  An unfiltered page is not representative of anything.
 - `/highlights` filters on **`leagueName`**; `/teams` and `/matches` use
-  `league`. Sending `league` to `/highlights` returns a 400.
+  `league`. Sending `league` to `/highlights` returns 400.
 - There is no `/leagues` endpoint for this sport.
-- `embeddable` is a field on `/highlights/geo-restrictions/{id}`, not on the
-  highlights list, and that endpoint is excluded from the free plan.
-- No `duration` field anywhere, so `WALL.maxDurationSeconds` could not be
-  applied from this API — YouTube's `videos.list` would be needed regardless.
-- Free tier is 100 requests/day, reported live in
-  `x-ratelimit-requests-limit`.
+- `embeddable` lives on `/highlights/geo-restrictions/{id}`, excluded from the
+  free plan. There is no `duration` field anywhere, so `WALL.maxDurationSeconds`
+  still needs YouTube's `videos.list`.
+- Free tier is 100 requests/day, reported in `x-ratelimit-requests-limit`.
+- Cross-league attribution is unreliable at the edges: two NFL preseason clips
+  were filed under Division II college matches sharing a nickname
+  ("Carolina Panthers" -> *Virginia Union Panthers*). Per-team college queries
+  did not show this problem.
 
 ## Notes and caveats
 
