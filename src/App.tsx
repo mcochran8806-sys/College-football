@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import HighlightWall from './pages/HighlightWall';
 import Settings from './pages/Settings';
+import Ticker from './pages/Ticker';
 import Scoreboard from './pages/Scoreboard';
 
 /**
@@ -21,5 +22,6 @@ export default function App() {
   const route = path.replace(/\/+$/, '');
   if (route === '/highlights') return <HighlightWall />;
   if (route === '/settings') return <Settings />;
+  if (route === '/ticker') return <Ticker />;
   return <Scoreboard />;
 }

@@ -241,6 +241,34 @@ export const WALL = {
 } as const;
 
 /**
+ * OBS score ticker (/ticker).
+ *
+ * Rendered into an OBS Browser Source, so the constraints differ from the TV
+ * screens: transparent background to composite over other layers, no overscan
+ * padding, and animation driven by transform so OBS's compositor stays cheap.
+ *
+ * style:
+ *   'scroll' a continuous bottom-line crawl, the broadcast convention
+ *   'flip'   one game at a time in a fixed box, rotating on a timer
+ *
+ * Everything here is overridable per-source via query parameters, so two OBS
+ * scenes can run different tickers off one deployment. See README.
+ */
+export const TICKER = {
+  style: 'scroll' as 'scroll' | 'flip',
+  /** Crawl speed in pixels per second. Broadcast tickers sit around 60-90. */
+  speedPxPerSecond: 70,
+  /** Seconds each game holds in 'flip' style. */
+  flipSeconds: 4,
+  /** Show games that have not kicked off yet. */
+  includeUpcoming: true,
+  /** Show finished games. */
+  includeFinal: true,
+  /** Transparent lets OBS composite it over video; solid gives a filled bar. */
+  background: 'transparent' as 'transparent' | 'solid',
+} as const;
+
+/**
  * Debug only. Leave empty. When set to YYYYMMDD the API functions will request
  * that slate from ESPN instead of today's. The TVs never send this.
  */

@@ -8,6 +8,7 @@ deployment**:
 | `/` | Scoreboard TV | Full slate, favorites first, auto-paginating, 20s refresh |
 | `/highlights` | Highlight wall | Auto-rotating YouTube highlights + live scoring-play interstitials |
 | `/settings` | Team picker | Click favorites per league, get a URL to point each TV at |
+| `/ticker` | OBS score ticker | Transparent broadcast-style crawl for an OBS Browser Source |
 
 Add `?league=nfl` to any of them for the NFL; college football is the default.
 
@@ -369,6 +370,66 @@ miserable. To change the defaults permanently instead, edit `FAVORITE_TEAMS` in
 Favorites also travel to `/api/plays` as a query param, because that endpoint
 decides which games to poll ESPN for and has to agree with what the screen
 treats as a favorite.
+
+## OBS score ticker
+
+`/ticker` renders a broadcast-style score crawl designed to be added to an OBS
+scene as a **Browser Source**. It runs off the same `/api/scoreboard` as the TV
+screens, so there is no extra backend and no extra polling cost.
+
+### Adding it to a scene
+
+1. In OBS: **Sources → + → Browser**
+2. URL:
+   ```
+   https://cfb-saturday.vercel.app/ticker
+   ```
+3. **Width 1920, Height 90.** Any height works — the type scales to fill it.
+4. Leave **Custom CSS** at its default. The page is already transparent, so
+   nothing needs overriding.
+5. Tick **Shutdown source when not visible** and **Refresh browser when scene
+   becomes active** — that way it reconnects with fresh scores each time you cut
+   to the scene, rather than showing a stale crawl.
+6. Position it at the bottom of the canvas.
+
+The page background is genuinely transparent (`html`, `body` **and** `#root`
+are all cleared), so OBS composites it straight over whatever is beneath. Use
+`?bg=solid` if you would rather have a filled bar.
+
+### Query parameters
+
+Every OBS source can be configured independently from one deployment, so a
+college ticker and an NFL ticker can live in different scenes.
+
+| Parameter | Values | Default |
+|---|---|---|
+| `league` | `nfl` | college |
+| `f` | comma-separated favorites, e.g. `f=UGA,GT` | `config.ts` |
+| `style` | `scroll`, `flip` | `scroll` |
+| `speed` | pixels per second | `70` |
+| `bg` | `transparent`, `solid` | `transparent` |
+| `upcoming` | `false` to hide games that haven't kicked off | shown |
+| `final` | `false` to hide finished games | shown |
+
+```
+/ticker?league=nfl&f=Lions,Seahawks&bg=solid    NFL, filled bar
+/ticker?style=flip                              one game at a time
+/ticker?speed=110&final=false                    faster, live and upcoming only
+```
+
+`scroll` is the classic bottom-line crawl. `flip` holds one game in a fixed box
+and rotates, which suits a corner box better than a full-width strip.
+
+Favorites are starred, red-zone games show `RED ZONE` in red, and close-and-late
+games show their clock in amber — the same rules the scoreboard uses.
+
+### Performance
+
+The crawl animates a single `transform: translate3d`, which stays on the
+compositor thread. OBS renders this every frame alongside everything else in
+your scene, so anything triggering layout per frame would show up as dropped
+frames. Duration is derived from the measured track width, so the crawl holds a
+constant pixels-per-second whether the slate has 12 games or 60.
 
 ## Configuration
 
