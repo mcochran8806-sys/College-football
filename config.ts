@@ -218,12 +218,26 @@ export const REQUIRED_TEAM_MATCHES = 2;
  *   'none'            matched games only
  *   'all'             anything the channels post
  *
- * minDurationSeconds drops Shorts, which are vertical, ~15s, and look wrong
- * on a 65" screen. Costs 1 extra quota unit per 50 videos checked.
+ * Duration bounds, both in seconds, either one 0 to disable. Durations come
+ * from videos.list, which takes 50 ids per call for 1 unit. A clip whose
+ * duration could not be read is always KEPT — never filter on missing data.
+ *
+ *   maxDurationSeconds  keeps the wall moving. A 20-minute full-game recap
+ *                       parks one game on screen for 20 minutes; a 60s cap
+ *                       means constant rotation across games.
+ *   minDurationSeconds  a floor, if you want one. Note it must stay BELOW the
+ *                       max or nothing can ever play.
+ *
+ * The tradeoff at a 60s cap: most sub-minute sports clips on YouTube are
+ * Shorts, which are vertical 9:16 and will letterbox with black bars either
+ * side on a 16:9 TV. Set dropShortsFormat to drop the ones whose titles say
+ * so (#shorts), at the cost of a much thinner queue.
  */
 export const WALL = {
   filler: 'highlights-only' as 'highlights-only' | 'cfb-only' | 'none' | 'all',
-  minDurationSeconds: 75,
+  minDurationSeconds: 0,
+  maxDurationSeconds: 60,
+  dropShortsFormat: false,
 } as const;
 
 /**

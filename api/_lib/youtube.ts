@@ -152,7 +152,7 @@ export function parseIsoDuration(iso: unknown): number | null {
 }
 
 /**
- * Fill in durations so Shorts can be dropped.
+ * Fill in durations so the length bounds can be applied.
  *
  * videos.list accepts up to 50 ids per call and still costs 1 unit, so the
  * whole batch is typically 1-2 units on top of the 11 for the playlists.
@@ -181,10 +181,79 @@ async function attachDurations(videos: HighlightVideo[], apiKey: string): Promis
   }
 }
 
+/**
+ * Titles that mark a clip as a YouTube Short — vertical 9:16, which letterboxes
+ * with black bars either side on a 16:9 TV. There is no isShort flag in the
+ * Data API, and the #shorts convention is the only free signal available, so
+ * this catches most but not all of them.
+ */
+export function isShortsFormat(title: string): boolean {
+  return /#\s?shorts?\b|\(shorts?\)|\bshorts\b/i.test(title);
+}
+
+export interface RejectedCounts {
+  tooShort: number;
+  tooLong: number;
+  shorts: number;
+  considered: number;
+}
+
+/**
+ * Apply WALL's length bounds.
+ *
+ * Exported and used by the MOCK=1 path too, so fixture mode exercises the real
+ * filter rather than quietly bypassing it — the whole point of mock mode is
+ * that it runs the same code.
+ *
+ * A clip whose duration could not be read is always KEPT. Never filter on
+ * missing data.
+ */
+export function applyLengthBounds(videos: HighlightVideo[]): {
+  kept: HighlightVideo[];
+  rejected: RejectedCounts;
+} {
+  const rejected: RejectedCounts = {
+    tooShort: 0,
+    tooLong: 0,
+    shorts: 0,
+    considered: videos.length,
+  };
+
+  const kept = videos.filter((v) => {
+    if (WALL.dropShortsFormat && isShortsFormat(v.title)) {
+      rejected.shorts += 1;
+      return false;
+    }
+    if (v.durationSeconds === null) return true;
+    if (WALL.minDurationSeconds > 0 && v.durationSeconds < WALL.minDurationSeconds) {
+      rejected.tooShort += 1;
+      return false;
+    }
+    if (WALL.maxDurationSeconds > 0 && v.durationSeconds > WALL.maxDurationSeconds) {
+      rejected.tooLong += 1;
+      return false;
+    }
+    return true;
+  });
+
+  const dropped = rejected.tooShort + rejected.tooLong + rejected.shorts;
+  if (dropped > 0) {
+    console.log(
+      `[youtube] length filter dropped ${dropped} of ${videos.length}: ` +
+        `${rejected.tooLong} over ${WALL.maxDurationSeconds}s, ` +
+        `${rejected.tooShort} under ${WALL.minDurationSeconds}s, ` +
+        `${rejected.shorts} marked #shorts`,
+    );
+  }
+
+  return { kept, rejected };
+}
+
 export interface FetchHighlightsResult {
   videos: HighlightVideo[];
   unresolvedChannels: string[];
   quotaExhausted: boolean;
+  rejected?: RejectedCounts;
 }
 
 /**
@@ -266,18 +335,10 @@ export async function fetchHighlights(
 
   await attachDurations(videos, apiKey);
 
-  // Drop Shorts. A 15-second vertical clip on a 65" screen is worse than
-  // nothing. Unknown durations are kept — never filter on missing data.
-  const longEnough = videos.filter(
-    (v) => v.durationSeconds === null || v.durationSeconds >= WALL.minDurationSeconds,
-  );
-  const dropped = videos.length - longEnough.length;
-  if (dropped > 0) {
-    console.log(`[youtube] dropped ${dropped} clip(s) under ${WALL.minDurationSeconds}s`);
-  }
+  const { kept: inBounds, rejected } = applyLengthBounds(videos);
 
   // Advance the per-channel watermark so a later pass can tell what's new.
-  for (const v of longEnough) {
+  for (const v of inBounds) {
     const prev = watermarks.get(v.channelId);
     if (!prev || Date.parse(v.publishedAt) > Date.parse(prev)) {
       watermarks.set(v.channelId, v.publishedAt);
@@ -285,9 +346,12 @@ export async function fetchHighlights(
   }
 
   return {
-    videos: longEnough,
+    videos: inBounds,
     unresolvedChannels: unresolved,
     quotaExhausted: sawQuotaError || isQuotaExhausted(),
+    // Surfaced in the API response so an empty wall is diagnosable without
+    // digging through function logs.
+    rejected,
   };
 }
 

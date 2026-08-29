@@ -89,6 +89,9 @@ export interface HighlightsResponse {
   quotaExhausted: boolean;
   /** Channels skipped because their id is still TODO_VERIFY. */
   unresolvedChannels: string[];
+  /** How many clips the length filter removed, so an empty wall is
+   *  diagnosable from the response alone. */
+  rejected?: { tooShort: number; tooLong: number; shorts: number; considered: number };
   mock?: boolean;
 }
 

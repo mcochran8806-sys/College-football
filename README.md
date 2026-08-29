@@ -505,10 +505,28 @@ highlights, scored by `cfbRelevance()`:
 matched games and falls back to score cards otherwise. `'all'` disables the
 gate.
 
-Clips shorter than `WALL.minDurationSeconds` (75s) are dropped server-side —
-Shorts are vertical and ~15s, and look wrong on a 65" screen. Durations come
-from `videos.list`, which takes 50 ids per call for 1 unit. An unknown
-duration is never filtered.
+### Clip length
+
+`WALL.maxDurationSeconds` (60s) and `WALL.minDurationSeconds` (0, disabled)
+bound how long a clip may be. The cap is what keeps the wall moving: a
+20-minute full-game recap parks one game on screen for 20 minutes, where a
+60-second cap rotates constantly across games.
+
+Durations come from `videos.list`, 50 ids per call for 1 unit. **A clip whose
+duration can't be read is always kept** — never filter on missing data.
+
+Two things to know about a sub-minute cap:
+
+- Most short sports clips on YouTube are **Shorts**, which are vertical 9:16
+  and letterbox with black bars either side on a 16:9 TV. Set
+  `WALL.dropShortsFormat: true` to drop the ones whose titles say `#shorts`,
+  at the cost of a much thinner queue. There is no `isShort` flag in the Data
+  API, so the title convention is the only free signal.
+- The min must stay below the max, or nothing can ever play.
+
+The `/api/highlights` response carries a `rejected` block
+(`{considered, tooLong, tooShort, shorts}`) so an empty wall is diagnosable
+from the response alone, without digging through function logs.
 
 Run `npm run test:relevance` after editing either list; its cases are real
 titles pulled from a live payload.

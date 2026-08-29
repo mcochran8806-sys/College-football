@@ -11,7 +11,12 @@ import type { HighlightsResponse } from '../shared/types.js';
 import { cached, peek } from './_lib/cache.js';
 import { isMock } from './_lib/mock.js';
 import { leagueOf, type ApiRequest, type ApiResponse } from './_lib/types.js';
-import { fetchHighlights, isQuotaExhausted, type FetchHighlightsResult } from './_lib/youtube.js';
+import {
+  applyLengthBounds,
+  fetchHighlights,
+  isQuotaExhausted,
+  type FetchHighlightsResult,
+} from './_lib/youtube.js';
 
 
 
@@ -23,8 +28,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
 
   if (isMock()) {
     const { MOCK_HIGHLIGHT_ITEMS } = await import('../fixtures/highlights.js');
-    const body: HighlightsResponse = {
-      videos: MOCK_HIGHLIGHT_ITEMS.map((it: any, i: number) => ({
+    // Runs the real length filter so MOCK=1 behaves like production.
+    const { kept, rejected } = applyLengthBounds(
+      MOCK_HIGHLIGHT_ITEMS.map((it: any, i: number) => ({
         videoId: it.contentDetails.videoId,
         title: it.snippet.title,
         publishedAt: it.snippet.publishedAt,
@@ -32,13 +38,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
         channelName: it.snippet.channelTitle,
         thumbnail: it.snippet.thumbnails?.medium?.url ?? null,
         priority: 3 - Math.floor(i / 4),
-        durationSeconds: 240,
+        durationSeconds: [42, 55, 38, 61, 200, 47, 33, 58, 900, 51][i % 10],
       })),
+    );
+    const body: HighlightsResponse = {
+      videos: kept,
       fetchedAt: new Date().toISOString(),
       stale: false,
       ageMs: 0,
       quotaExhausted: false,
       unresolvedChannels: [],
+      rejected,
       mock: true,
     };
     res.status(200).json(body);
@@ -84,6 +94,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       ageMs: result.ageMs,
       quotaExhausted: result.value.quotaExhausted,
       unresolvedChannels: result.value.unresolvedChannels,
+      rejected: result.value.rejected,
     } satisfies HighlightsResponse);
   } catch (err) {
     console.error('[api/highlights] failed with no cached fallback:', err);
