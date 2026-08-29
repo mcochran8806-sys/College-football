@@ -53,6 +53,15 @@ function summarise(items: any[]) {
       a[String(h?.source)] = (a[String(h?.source)] ?? 0) + 1;
       return a;
     }, {}),
+    // How recent is the newest clip? The college samples were all 2025
+    // season, and a wall needs current-season coverage to be useful.
+    newestGameDates: [
+      ...new Set(items.map((h) => String(h?.match?.date ?? '').slice(0, 10))),
+    ]
+      .filter(Boolean)
+      .sort()
+      .reverse()
+      .slice(0, 5),
     playableSample: playable.slice(0, 4).map((h) => ({
       title: String(h?.title ?? '').slice(0, 60),
       category: h?.category,
@@ -76,12 +85,14 @@ export default async function handler(_req: ApiRequest, res: ApiResponse): Promi
 
   // Real FBS programs: the user's three favorites plus two blue-bloods that
   // are certain to be filmed if anything is.
+  // NFL favorites. My earlier "leagueName=NFL returns 0" used the same
+  // unfiltered method that proved wrong for college, so it needs re-testing
+  // per team before any recommendation.
   const teams = [
-    'Georgia Bulldogs',
-    'Alabama Crimson Tide',
-    'Georgia Tech Yellow Jackets',
-    'Ohio State Buckeyes',
-    'Texas Longhorns',
+    'Detroit Lions',
+    'Seattle Seahawks',
+    'Philadelphia Eagles',
+    'Kansas City Chiefs',
   ];
 
   const perTeam: Record<string, unknown> = {};
