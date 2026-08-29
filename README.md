@@ -552,36 +552,56 @@ Played-clip and seen-play state is session memory only.
 
 ## Evaluated and rejected: Highlightly
 
-Highlightly's American Football API was probed as a replacement for the
-YouTube channel polling. It is not usable for a video wall, and the reason is
-worth recording so it does not get re-investigated:
+Highlightly's NFL & NCAA API was evaluated as a replacement for the YouTube
+channel polling, across five probe rounds against the live API. It is not
+usable for a video wall. Recording why, so it is not re-investigated:
 
-| Sampled | 40 clips |
-|---|---|
-| Source | 4 youtube, **36 espn** |
-| ESPN clips with an `embedUrl` | **0** — the field is null on all 36 |
-| Playable and correctly attributed | **2 of 40** |
+**NFL returns nothing.** `/highlights?leagueName=NFL` responds 200 with
+`totalCount: 0`. There are no NFL highlights in the API at all.
+
+**NCAA returns 40 records, 4 playable.**
+
+| Source | Records | With an `embedUrl` |
+|---|---|---|
+| espn | 36 | **0** |
+| youtube | 4 | 4 |
 
 ESPN-sourced records carry only `url: https://www.espn.com/video/clip?id=...`
-and a thumbnail. There is no embeddable video, so playing them would require
-either framing espn.com (blocked) or extracting the stream (DRM/geo-restricted,
-and explicitly out of scope for this project).
+and a thumbnail. Playing them would need either framing espn.com (blocked) or
+extracting the stream (DRM/geo-restricted, out of scope here). The spec itself
+notes a hosting platform "can impose geo restrictions or prevent direct
+embedding".
 
-The 4 YouTube-sourced clips are playable, but 2 of them are NFL preseason
-content attached to Division II college games — "Houston Texans vs. Carolina
-Panthers" filed under *Virginia Union Panthers @ Lenoir-Rhyne Bears*. Their
-cross-league matcher collides on nicknames, the exact failure `teamAliases`
-and `AMBIGUOUS_TOKENS` exist to prevent here.
+**Two of those four playable clips are misattributed.** "Houston Texans vs.
+Carolina Panthers" is filed under *Virginia Union Panthers @ Lenoir-Rhyne
+Bears*; "LA Rams vs. LA Chargers" under *Marist Red Foxes @ New Haven
+Chargers*. Their cross-league matcher collides on nicknames — the exact failure
+`teamAliases` and `AMBIGUOUS_TOKENS` prevent here. Effective yield: **2 usable
+clips in 40**.
 
-Also absent from the live response despite being documented: `embeddable` and
-`duration`. Without `duration`, `WALL.maxDurationSeconds` cannot be applied
-from this API at all, so YouTube's `videos.list` would be needed regardless.
+**Per-match queries return nothing.** `/highlights?matchId=` for finished games
+gives `totalCount: 0`. And `/matches?league=NCAA` returns Division II and FCS
+fixtures (Delta State, Northeastern State, UAlbany, William & Mary), not the
+FBS slate.
 
-Useful facts if anyone revisits it: the base URL is
-`https://american-football.highlightly.net`, auth is the `x-rapidapi-key`
-header **even on the direct platform** (not `Authorization: Bearer`, whatever
-the docs say), `league` is rejected as a parameter on `/highlights`, and there
-is no `/leagues` endpoint for this sport.
+A paid tier lifts the free plan's row limit but fixes none of this: `embedUrl`
+is null because ESPN does not offer embeds, not because of a paywall, and the
+misattribution is a data-quality problem.
+
+### Facts worth keeping, if anyone revisits
+
+- Base URL `https://american-football.highlightly.net`; auth is the
+  **`x-rapidapi-key`** header even on the direct platform — `Authorization:
+  Bearer` and `x-api-key` both 403.
+- `/highlights` filters on **`leagueName`**; `/teams` and `/matches` use
+  `league`. Sending `league` to `/highlights` returns a 400.
+- There is no `/leagues` endpoint for this sport.
+- `embeddable` is a field on `/highlights/geo-restrictions/{id}`, not on the
+  highlights list, and that endpoint is excluded from the free plan.
+- No `duration` field anywhere, so `WALL.maxDurationSeconds` could not be
+  applied from this API — YouTube's `videos.list` would be needed regardless.
+- Free tier is 100 requests/day, reported live in
+  `x-ratelimit-requests-limit`.
 
 ## Notes and caveats
 
