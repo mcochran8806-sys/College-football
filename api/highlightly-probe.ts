@@ -85,19 +85,25 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     return;
   }
 
+  // Endpoint and parameter names taken from the dashboard's API Demo, which
+  // is authoritative. Note `league`, NOT `leagueName` — an earlier round sent
+  // the wrong one. There is no /leagues endpoint for this sport at all.
   const probes = [
-    // No date filter at all — should return the most recent regardless.
+    // No filter — should return the most recent regardless of date.
     '/highlights?limit=5',
-    // Today, and the last two Saturdays, in case highlights simply lag.
+    // Today, and last Saturday, in case highlights simply lag the games.
     `/highlights?date=${ymd(0)}&limit=5`,
     `/highlights?date=${ymd(-7)}&limit=5`,
-    // Do matches work when highlights do not? Separates "no data" from
-    // "endpoint or plan problem".
+    // With the correct league parameter this time.
+    `/highlights?league=NFL&limit=5`,
+    `/highlights?league=NCAA&limit=5`,
+    // Do matches work when highlights do not? Separates "no data yet" from
+    // "this plan does not include highlights".
     `/matches?date=${ymd(0)}&limit=5`,
-    '/matches?limit=5',
-    // Leagues 404'd at /leagues last round; try the prefixed form the error
-    // message implied.
-    '/american-football/leagues?limit=5',
+    // Known-good control: /teams with the demo's own example parameters. If
+    // this returns rows and /highlights does not, the difference is the data,
+    // not the key.
+    '/teams?league=NFL&limit=5',
   ];
 
   const results = [];
