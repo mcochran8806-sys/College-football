@@ -550,6 +550,39 @@ Played-clip and seen-play state is session memory only.
 
 ---
 
+## Evaluated and rejected: Highlightly
+
+Highlightly's American Football API was probed as a replacement for the
+YouTube channel polling. It is not usable for a video wall, and the reason is
+worth recording so it does not get re-investigated:
+
+| Sampled | 40 clips |
+|---|---|
+| Source | 4 youtube, **36 espn** |
+| ESPN clips with an `embedUrl` | **0** — the field is null on all 36 |
+| Playable and correctly attributed | **2 of 40** |
+
+ESPN-sourced records carry only `url: https://www.espn.com/video/clip?id=...`
+and a thumbnail. There is no embeddable video, so playing them would require
+either framing espn.com (blocked) or extracting the stream (DRM/geo-restricted,
+and explicitly out of scope for this project).
+
+The 4 YouTube-sourced clips are playable, but 2 of them are NFL preseason
+content attached to Division II college games — "Houston Texans vs. Carolina
+Panthers" filed under *Virginia Union Panthers @ Lenoir-Rhyne Bears*. Their
+cross-league matcher collides on nicknames, the exact failure `teamAliases`
+and `AMBIGUOUS_TOKENS` exist to prevent here.
+
+Also absent from the live response despite being documented: `embeddable` and
+`duration`. Without `duration`, `WALL.maxDurationSeconds` cannot be applied
+from this API at all, so YouTube's `videos.list` would be needed regardless.
+
+Useful facts if anyone revisits it: the base URL is
+`https://american-football.highlightly.net`, auth is the `x-rapidapi-key`
+header **even on the direct platform** (not `Authorization: Bearer`, whatever
+the docs say), `league` is rejected as a parameter on `/highlights`, and there
+is no `/leagues` endpoint for this sport.
+
 ## Notes and caveats
 
 - **ESPN's default slate is the current week, not today.** With no `?dates`
