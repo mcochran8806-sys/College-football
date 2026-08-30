@@ -131,6 +131,19 @@ const server = createServer(async (req, res) => {
   res.end(readFileSync(file));
 });
 
+// A stale server from a previous run is the overwhelmingly likely cause here,
+// and Node's default is an unhandled 'error' event with a stack trace that
+// buries the one line that matters.
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n  Port ${PORT} is already in use — an earlier run is probably still going.\n`);
+    console.error(`  Stop it:  pkill -f server.mjs`);
+    console.error(`  Or use another port:  PORT=5181 npm start\n`);
+    process.exit(1);
+  }
+  throw err;
+});
+
 server.listen(PORT, '0.0.0.0', () => {
   const addresses = Object.values(networkInterfaces())
     .flat()

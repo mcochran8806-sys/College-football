@@ -626,6 +626,11 @@ its routing.
 
 It reconnects when the phone wakes, since a locked screen drops the socket.
 
+### `EADDRINUSE: address already in use :::5180`
+
+An earlier `npm start` is still running. `pkill -f server.mjs`, then start
+again — or run this one elsewhere with `PORT=5181 npm start`.
+
 ### Why the hand-rolled SHA-256
 
 obs-websocket authenticates with a SHA-256 challenge, and `crypto.subtle` — the
