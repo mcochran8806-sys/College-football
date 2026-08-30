@@ -87,6 +87,37 @@ export default function BreakOverlay() {
     };
   }, []);
 
+  /**
+   * Scale the whole overlay to the source size.
+   *
+   * This shares GameCard with the TV scoreboard, whose sizes are fixed rem
+   * values tuned for 1920x1080. In an OBS Browser Source set to anything else —
+   * or set small and then stretched on the canvas, which is the usual mistake —
+   * that renders enormous and overflows.
+   *
+   * Because every one of those sizes is rem-based, moving the ROOT font size
+   * rescales all of them at once. Scaling on the smaller of the two ratios
+   * guarantees the grid fits in both dimensions rather than just one.
+   */
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = root.style.fontSize;
+
+    const rescale = () => {
+      const ratio = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+      // Clamped so a tiny source stays legible and a 4K one does not balloon.
+      const size = Math.max(6, Math.min(32, 16 * ratio));
+      root.style.fontSize = `${size}px`;
+    };
+
+    rescale();
+    window.addEventListener('resize', rescale);
+    return () => {
+      window.removeEventListener('resize', rescale);
+      root.style.fontSize = previous;
+    };
+  }, []);
+
   const shown = useMemo(() => {
     const slate = sortGames(filterSlate(games, favorites, league), favorites, league);
     return slate.slice(0, 6);
@@ -134,7 +165,7 @@ export default function BreakOverlay() {
           <span className="text-2xl text-field-500">{longDate()}</span>
         </header>
 
-        <main className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-5">
+        <main className="grid min-h-0 flex-1 grid-cols-3 grid-rows-2 gap-5 overflow-hidden">
           {shown.map((game) => (
             <GameCard key={game.id} game={game} favorite={favorite(game)} />
           ))}

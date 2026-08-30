@@ -503,6 +503,11 @@ Browser Sources at full canvas size:
 | Auto overlay | `/break?f=...` | visible |
 | Manual | `/break?f=...&force=1` | hidden, above the auto one |
 
+**Size the source to your canvas** — 1920x1080, or 3840x2160 for a 4K canvas.
+The overlay rescales itself to whatever size it is given, so a mismatch no
+longer renders enormous and clipped; but a source set small and then stretched
+on the canvas is still upscaled pixels and will look soft.
+
 Leave **Shutdown source when not visible** *unchecked* on the auto source — it
 has to keep running to notice a break. Then in **Settings -> Hotkeys**:
 
