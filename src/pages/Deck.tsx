@@ -28,6 +28,10 @@ interface Connection {
   gameAudioSource: string;
   musicSource: string;
   replaySource: string;
+  game1Source: string;
+  game1Audio: string;
+  game2Source: string;
+  game2Audio: string;
 }
 
 const DEFAULTS: Connection = {
@@ -39,6 +43,10 @@ const DEFAULTS: Connection = {
   gameAudioSource: 'Game Audio',
   musicSource: 'Break music',
   replaySource: 'Instant replay',
+  game1Source: 'Game 1',
+  game1Audio: 'Game 1 Audio',
+  game2Source: 'Game 2',
+  game2Audio: 'Game 2 Audio',
 };
 
 export default function Deck() {
@@ -58,6 +66,8 @@ export default function Deck() {
   const [showSetup, setShowSetup] = useState(false);
   /** Held for the length of the clip, so the button cannot be double-fired. */
   const [replaying, setReplaying] = useState(false);
+  /** Which game slot is on screen, read from OBS rather than assumed. */
+  const [activeGame, setActiveGame] = useState<1 | 2 | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [, force] = useState(0);
   /**
@@ -105,14 +115,34 @@ export default function Deck() {
     setTimeout(() => setToast(null), 2600);
   };
 
-  const gameInput = conn.gameAudioSource.trim();
+  const fallbackAudio = conn.gameAudioSource.trim();
   const musicInput = conn.musicSource.trim();
+  const g1Video = conn.game1Source.trim();
+  const g1Audio = conn.game1Audio.trim();
+  const g2Video = conn.game2Source.trim();
+  const g2Audio = conn.game2Audio.trim();
 
-  const refreshAudio = useCallback(async () => {
-    const game = gameInput ? await obs.isInputMuted(gameInput) : null;
+  /**
+   * Whichever game is on screen owns the "game audio" controls, so muting for
+   * a commercial silences the game you are actually watching rather than a
+   * fixed source that may not be the live one. Falls back to the single named
+   * input for a rig with only one feed.
+   */
+  const gameInput =
+    (activeGame === 1 ? g1Audio : activeGame === 2 ? g2Audio : '') || fallbackAudio;
+
+  const refreshState = useCallback(async () => {
+    const v1 = g1Video ? await obs.isSourceVisible(g1Video) : null;
+    const v2 = g2Video ? await obs.isSourceVisible(g2Video) : null;
+    const live = v1 ? 1 : v2 ? 2 : null;
+    setActiveGame(live);
+
+    const audioName =
+      (live === 1 ? g1Audio : live === 2 ? g2Audio : '') || fallbackAudio;
+    const game = audioName ? await obs.isInputMuted(audioName) : null;
     const music = musicInput ? await obs.isInputMuted(musicInput) : null;
     setAudio({ game, music });
-  }, [obs, gameInput, musicInput]);
+  }, [obs, g1Video, g2Video, g1Audio, g2Audio, fallbackAudio, musicInput]);
 
   // Read the real state whenever the socket comes up, so the toggles never
   // show a guess — including after the phone wakes and reconnects.
@@ -121,8 +151,8 @@ export default function Deck() {
       setAudio({ game: null, music: null });
       return;
     }
-    void refreshAudio();
-  }, [connected, refreshAudio]);
+    void refreshState();
+  }, [connected, refreshState]);
 
   const run = async (label: string, fn: () => Promise<void>) => {
     try {
@@ -134,8 +164,36 @@ export default function Deck() {
       say(err instanceof Error ? err.message : String(err));
     } finally {
       // Even a failed action may have half-applied, so re-read either way.
-      if (connected) void refreshAudio();
+      if (connected) void refreshState();
     }
+  };
+
+  /**
+   * Puts one game on screen and takes the other off, moving its audio with it.
+   *
+   * The incoming feed is shown before the outgoing one is hidden, so the cut
+   * never passes through an empty canvas.
+   */
+  const switchGame = async (n: 1 | 2) => {
+    const on = n === 1 ? { video: g1Video, audio: g1Audio } : { video: g2Video, audio: g2Audio };
+    const off = n === 1 ? { video: g2Video, audio: g2Audio } : { video: g1Video, audio: g1Audio };
+    if (!on.video) throw new Error(`No source name set for Game ${n}. Open setup.`);
+
+    const steps: Array<[string, () => Promise<void>]> = [];
+    steps.push([`Game ${n}`, () => obs.setSourceVisible(on.video, true)]);
+    if (on.audio) steps.push([`Game ${n} audio`, () => obs.setInputSilenced(on.audio, false)]);
+    if (off.video) steps.push(['the other feed', () => obs.setSourceVisible(off.video, false)]);
+    if (off.audio) steps.push(['the other audio', () => obs.setInputSilenced(off.audio, true)]);
+
+    const failed: string[] = [];
+    for (const [name, fn] of steps) {
+      try {
+        await fn();
+      } catch {
+        failed.push(name);
+      }
+    }
+    if (failed.length) throw new Error(`Switched, but could not find ${failed.join(' or ')}.`);
   };
 
   /**
@@ -231,6 +289,20 @@ export default function Deck() {
           )}
         </section>
 
+        {/* --- which game is on screen ------------------------------------- */}
+        <div className="grid grid-cols-2 gap-3 pb-3">
+          {([1, 2] as const).map((n) => (
+            <DeckButton
+              key={n}
+              label={`Game ${n}`}
+              hint={activeGame === n ? 'on screen' : 'switch to it'}
+              active={activeGame === n}
+              disabled={!connected}
+              onPress={() => run(`Game ${n} up`, () => switchGame(n))}
+            />
+          ))}
+        </div>
+
         {/* --- buttons ----------------------------------------------------- */}
         <div className="grid grid-cols-2 gap-3">
           <DeckButton
@@ -319,7 +391,11 @@ export default function Deck() {
                 ['password', 'WebSocket password'],
                 ['autoSource', 'Auto overlay source name'],
                 ['manualSource', 'Manual scoreboard source name'],
-                ['gameAudioSource', 'Game audio source name'],
+                ['game1Source', 'Game 1 video source name'],
+                ['game1Audio', 'Game 1 audio source name'],
+                ['game2Source', 'Game 2 video source name'],
+                ['game2Audio', 'Game 2 audio source name'],
+                ['gameAudioSource', 'Game audio if no game slots are set'],
                 ['musicSource', 'Break music source name'],
                 ['replaySource', 'Instant replay media source name'],
               ] as const

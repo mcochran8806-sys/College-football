@@ -595,6 +595,7 @@ Nothing else to install.
 
 | Button | Does |
 |---|---|
+| Game 1 / Game 2 | Puts that feed on screen and moves its audio with it |
 | Commercial | Scoreboard up, game audio muted, break music unmuted |
 | Back to Game | The exact reverse |
 | Game Audio | Mutes or unmutes the game on its own, mid-play |
@@ -663,6 +664,29 @@ Properties or you will not hear it in the room — only the stream will.
 The sink is not persistent; an autostart entry running that same `pactl` line
 restores it on login, and because the sink name is stable the player remembers
 its routing.
+
+### Switching games
+
+Two game slots, each a video source plus its own audio input. Pressing one
+shows that feed, unsilences its audio, then hides the other and silences its
+audio — in that order, so the cut never passes through an empty canvas.
+
+The slots also decide what the **Commercial** and **Game Audio** buttons act
+on: whichever feed is on screen owns the game audio, so muting for a break
+silences the game you are actually watching rather than a fixed source that may
+not be the live one. A rig with a single feed leaves the slots blank and names
+one input in *Game audio if no game slots are set*.
+
+Which game is live is read back from OBS rather than remembered locally, so a
+switch made in OBS itself still shows correctly on the phone.
+
+A typical pairing is a capture card on `Game 1` and a browser window on
+`Game 2`. Streaming services protect their video with DRM that OBS's built-in
+Browser Source cannot decrypt — its Chromium build ships without the Widevine
+module — so a subscription stream has to come in as **Window Capture
+(Xcomposite)** of a real browser window instead. Give each browser its own
+process (`firefox -P name --no-remote`) if you want independent audio, since
+PulseAudio routes per process, not per window.
 
 ### Instant replay
 
