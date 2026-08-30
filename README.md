@@ -563,6 +563,23 @@ reimplementation.
 
 `npm run dev` also serves everything on the LAN if you would rather iterate.
 
+### A desktop button
+
+```bash
+./scripts/install-launcher.sh
+```
+
+Puts **CFB Saturday** in the applications menu; right-click it there to add it
+to the panel or the desktop. The paths in a `.desktop` entry have to be
+absolute, so the file is generated from wherever the repo actually lives rather
+than shipped fixed.
+
+The launcher runs `scripts/start-rig.sh`, which clears a stale server off the
+port before starting — the usual reason a launch fails — and holds the terminal
+open afterwards so the LAN addresses, or an error, stay readable. **Closing
+that window stops the server**, which makes the open window the honest
+indicator of whether the rig is running.
+
 ## Phone deck
 
 `/deck` is a Stream Deck built out of an old phone. Open it over http on the
