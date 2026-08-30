@@ -51,6 +51,21 @@ fi
 echo "node $(node -v 2>/dev/null)  ·  npm $(command -v npm)"
 echo
 
+# The null sink carrying break music does not survive a reboot, and an audio
+# server restart — which plugging in HDMI can cause — drops it mid-session. Its
+# absence surfaces on the deck as a bare "not found" on the Music button, which
+# points at the source name rather than at the real cause. Recreate it here,
+# since starting the rig is exactly when it needs to exist.
+if command -v pactl >/dev/null 2>&1; then
+  if ! pactl list short sinks 2>/dev/null | grep -qw obs_music; then
+    if pactl load-module module-null-sink sink_name=obs_music \
+        sink_properties=device.description=OBS_Music >/dev/null 2>&1; then
+      echo "Recreated the OBS_Music sink — re-point your player to it in pavucontrol."
+      echo
+    fi
+  fi
+fi
+
 npm run stop >/dev/null 2>&1
 
 npm start

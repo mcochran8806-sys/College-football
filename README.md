@@ -661,9 +661,16 @@ Output Capture (PulseAudio)** source in OBS named `Break music` on device
 **Monitor of OBS_Music**. Set it to **Monitor and Output** in Advanced Audio
 Properties or you will not hear it in the room — only the stream will.
 
-The sink is not persistent; an autostart entry running that same `pactl` line
-restores it on login, and because the sink name is stable the player remembers
-its routing.
+The sink is not persistent. `scripts/start-rig.sh` recreates it if it is
+missing, so clicking the launcher is enough — a reboot, or an audio-server
+restart mid-session (connecting an HDMI display can cause one), drops the sink
+and the next launch puts it back. Because the sink name is stable, the player
+remembers its routing and reconnects; only streams already playing need
+re-pointing.
+
+A missing sink shows up on the deck as `not found` on the **Music** button,
+which points at the source name rather than at the real cause — worth knowing
+before you go hunting through OBS.
 
 ### Switching games
 
