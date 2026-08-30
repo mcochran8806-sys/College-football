@@ -574,8 +574,15 @@ to the panel or the desktop. The paths in a `.desktop` entry have to be
 absolute, so the file is generated from wherever the repo actually lives rather
 than shipped fixed.
 
-The launcher runs `scripts/start-rig.sh`, which clears a stale server off the
-port before starting — the usual reason a launch fails — and holds the terminal
+The launcher runs `scripts/start-rig.sh`, which first locates Node. A shortcut
+launches from a minimal environment that never sources `~/.bashrc`, so a Node
+installed by **nvm** or **fnm** is absent from PATH and the launcher dies with
+`npm: command not found` while the same command works fine in a terminal. The
+script loads the version manager the way a login shell would, then falls back
+to the usual system directories, and says exactly what to do if it still comes
+up empty.
+
+It then clears a stale server off the port before starting — the usual reason a launch fails — and holds the terminal
 open afterwards so the LAN addresses, or an error, stay readable. **Closing
 that window stops the server**, which makes the open window the honest
 indicator of whether the rig is running.
