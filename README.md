@@ -10,6 +10,7 @@ deployment**:
 | `/settings` | Team picker | Click favorites per league, get a URL to point each TV at |
 | `/ticker` | OBS score ticker | Transparent broadcast-style crawl for an OBS Browser Source |
 | `/break` | Auto break scoreboard | Full scoreboard that raises itself during commercial breaks |
+| `/deck` | Phone control surface | Stream-Deck-style buttons driving OBS over its WebSocket |
 
 Add `?league=nfl` to any of them for the NFL; college football is the default.
 
@@ -526,6 +527,77 @@ has to keep running to notice a break. Then in **Settings -> Hotkeys**:
 | `watch=<team>` | Follow that team's game today — survives the week |
 | `game=<id>` | Pin one ESPN event id; opaque and stale after a week |
 | `halftime` / `quarters` / `scores` | `false` to disable that trigger |
+
+## Running it locally
+
+The Vercel deployment stays exactly as it is — the TVs keep using it, so they
+work whether or not your PC is on. The local server exists for one reason:
+
+> Browsers block `ws://` connections from an `https://` page, and obs-websocket
+> does not speak TLS. So `/deck` **cannot** reach OBS from the Vercel copy. It
+> has to be served over plain http from your own machine.
+
+```bash
+npm start            # build, then serve on 0.0.0.0:5180
+PORT=8080 npm start  # somewhere else
+npm run serve        # skip the build, serve what is already in dist/
+```
+
+It prints your LAN addresses on boot:
+
+```
+  local     http://localhost:5180/
+  network   http://192.168.1.42:5180/
+
+  OBS sources   http://localhost:5180/ticker
+                http://localhost:5180/break
+  phone deck    http://192.168.1.42:5180/deck
+```
+
+The API routes are bundled by esbuild into `dist-server/` first
+(`scripts/build-server.mjs`). That step exists because the source imports
+`"../config.js"` meaning `"../config.ts"` — a TypeScript convention bundlers and
+`tsc` understand but Node's loader does not. esbuild resolves it the same way
+Vercel does, so **the local server runs byte-identical handler code**, not a
+reimplementation.
+
+`npm run dev` also serves everything on the LAN if you would rather iterate.
+
+## Phone deck
+
+`/deck` is a Stream Deck built out of an old phone. Open it over http on the
+LAN — `http://<pc-ip>:5180/deck` — and it connects straight to obs-websocket.
+Nothing else to install.
+
+| Button | Does |
+|---|---|
+| Scoreboard Up | Shows the manual break source |
+| Back to Game | Hides it |
+| End Break | Hides the auto overlay, ending a break early |
+| Resume Auto | Re-arms automatic breaks |
+| Save Replay | Saves the replay buffer, starting it first if it is off |
+
+Above the buttons is a live readout of your favorite game — score, clock and a
+red-zone flag — so the phone doubles as a glance screen.
+
+### Setup
+
+1. OBS: **Tools → WebSocket Server Settings** → enable, then **Show Connect
+   Info** for the password. (Built in since OBS 28; no plugin.)
+2. Open `/deck` on the phone, tap the status pill, enter the PC's IP, port
+   `4455`, and the password. Source names must match your OBS sources exactly.
+3. Save. Settings persist in that phone's local storage.
+
+It reconnects when the phone wakes, since a locked screen drops the socket.
+
+### Why the hand-rolled SHA-256
+
+obs-websocket authenticates with a SHA-256 challenge, and `crypto.subtle` — the
+obvious tool — is only exposed in a secure context. On a phone at
+`http://192.168.x.x` it is simply `undefined`. So `src/lib/sha256.ts` implements
+it directly. `npm run test:sha256` cross-checks it against Node's crypto,
+including block-boundary lengths and the full obs auth derivation, because a
+wrong hash surfaces only as an opaque auth rejection.
 
 ## Configuration
 

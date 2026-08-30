@@ -3,6 +3,7 @@ import HighlightWall from './pages/HighlightWall';
 import Settings from './pages/Settings';
 import Ticker from './pages/Ticker';
 import BreakOverlay from './pages/BreakOverlay';
+import Deck from './pages/Deck';
 import Scoreboard from './pages/Scoreboard';
 
 /**
@@ -25,5 +26,6 @@ export default function App() {
   if (route === '/settings') return <Settings />;
   if (route === '/ticker') return <Ticker />;
   if (route === '/break') return <BreakOverlay />;
+  if (route === '/deck') return <Deck />;
   return <Scoreboard />;
 }

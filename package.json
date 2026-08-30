@@ -12,8 +12,12 @@
     "test:matcher": "node scripts/test-matcher.mjs",
     "test:relevance": "node scripts/test-relevance.mjs",
     "test:nfl": "node scripts/test-nfl.mjs",
-    "test": "npm run test:matcher && npm run test:relevance && npm run test:nfl && npm run test:plausible",
-    "test:plausible": "node scripts/test-plausible.mjs"
+    "test": "npm run test:matcher && npm run test:relevance && npm run test:nfl && npm run test:plausible && npm run test:sha256",
+    "test:plausible": "node scripts/test-plausible.mjs",
+    "build:server": "node scripts/build-server.mjs",
+    "start": "npm run build && npm run build:server && node server.mjs",
+    "serve": "node server.mjs",
+    "test:sha256": "node scripts/test-sha256.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
