@@ -646,8 +646,16 @@ It reconnects when the phone wakes, since a locked screen drops the socket.
 
 ### `EADDRINUSE: address already in use :::5180`
 
-An earlier `npm start` is still running. `pkill -f server.mjs`, then start
-again — or run this one elsewhere with `PORT=5181 npm start`.
+An earlier `npm start` is still running. `npm run stop`, then start again — or
+run this one elsewhere with `PORT=5181 npm start`.
+
+`npm run stop` goes after whatever holds the port rather than matching a
+command name, so it also catches a server started some other way. To see what
+that is first:
+
+```bash
+ss -lptn 'sport = :5180'
+```
 
 ### Why the hand-rolled SHA-256
 

@@ -137,7 +137,10 @@ const server = createServer(async (req, res) => {
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`\n  Port ${PORT} is already in use — an earlier run is probably still going.\n`);
-    console.error(`  Stop it:  pkill -f server.mjs`);
+    // pkill misses a listener started under a different command line, so
+    // point at the port itself — that always finds whoever actually holds it.
+    console.error(`  Stop it:              npm run stop`);
+    console.error(`  See what has it:      ss -lptn 'sport = :${PORT}'`);
     console.error(`  Or use another port:  PORT=5181 npm start\n`);
     process.exit(1);
   }

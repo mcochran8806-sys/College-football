@@ -17,6 +17,7 @@
     "build:server": "node scripts/build-server.mjs",
     "start": "npm run build && npm run build:server && node server.mjs",
     "serve": "node server.mjs",
+    "stop": "fuser -k ${PORT:-5180}/tcp 2>/dev/null || pkill -f 'node server.mjs' || true",
     "test:sha256": "node scripts/test-sha256.mjs"
   },
   "dependencies": {
