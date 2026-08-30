@@ -447,11 +447,36 @@ It sits in the scene permanently and renders nothing until a trigger fires,
 then fades a full scoreboard in and back out on its own. No scene switching,
 no OBS automation, no WebSocket.
 
+### Which game it follows
+
+The app cannot see your television, so this is a **stated preference, not a
+detection**. Pick the game in `/settings`; it pins by **team**, so the URL still
+works next Saturday:
+
+```
+/break?f=Georgia,Georgia%20Tech,Alabama&watch=Georgia%20Tech
+```
+
+Without `watch=` it guesses — the first in-progress favorite. Fine when one
+favorite is playing, a coin toss when three are. Against the sample slate:
+
+```
+watch=(guess)       ->  Georgia @ Alabama
+watch=Georgia Tech  ->  Georgia Tech @ Clemson
+watch=Alabama       ->  Georgia @ Alabama
+```
+
+Pinning by team rather than game id matters: an ESPN event id is opaque and
+different every week, so a pinned id goes stale. `watch=Georgia` resolves to
+whatever game Georgia is in today.
+
+When the overlay raises, its header names the game that triggered it — so
+following the wrong game is visible rather than silent.
+
 ### Triggers
 
-Only signals that are near-certain, watched on the **focus game** — the first
-in-progress favorite, or `?game=<id>`. Triggering on all sixty games would
-leave the scoreboard up permanently.
+Only signals that are near-certain, watched on the focus game above.
+Triggering on all sixty games would leave the scoreboard up permanently.
 
 | Trigger | Confidence | Default hold |
 |---|---|---|
@@ -493,7 +518,8 @@ has to keep running to notice a break. Then in **Settings -> Hotkeys**:
 |---|---|
 | `force=1` | Always shown — the manual source |
 | `auto=0` | Never auto-triggers; manual only |
-| `game=<id>` | Pin to one game instead of the first in-progress favorite |
+| `watch=<team>` | Follow that team's game today — survives the week |
+| `game=<id>` | Pin one ESPN event id; opaque and stale after a week |
 | `halftime` / `quarters` / `scores` | `false` to disable that trigger |
 
 ## Configuration

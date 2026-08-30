@@ -48,6 +48,7 @@ export default function Settings() {
     }
     setSelected([...LEAGUE_SETTINGS[leagueId].favorites]);
     setFilter('');
+    setBrkWatch('');
   }, [leagueId]);
   const [filter, setFilter] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
@@ -66,6 +67,8 @@ export default function Settings() {
   const [brkHalftime, setBrkHalftime] = useState(true);
   const [brkQuarters, setBrkQuarters] = useState(true);
   const [brkScores, setBrkScores] = useState(true);
+  /** Which game the break overlay follows. Empty means "guess". */
+  const [brkWatch, setBrkWatch] = useState('');
 
   // Mirror to storage as you go, so opening the bare URL on THIS device
   // remembers. The generated URL is still what makes it stick on a TV.
@@ -174,6 +177,7 @@ export default function Settings() {
 
   const breakUrl = (() => {
     const p = [...parts];
+    if (brkWatch) p.push(`watch=${encodeURIComponent(brkWatch)}`);
     if (!brkHalftime) p.push('halftime=false');
     if (!brkQuarters) p.push('quarters=false');
     if (!brkScores) p.push('scores=false');
@@ -181,9 +185,10 @@ export default function Settings() {
   })();
 
   // The manual source: always on, auto-detection off, toggled by an OBS hotkey.
-  const breakManualUrl = `${origin}/break${
-    parts.length > 0 ? `?${parts.join('&')}&force=1` : '?force=1'
-  }`;
+  const breakManualUrl = (() => {
+    const p = [...parts, 'force=1'];
+    return `${origin}/break?${p.join('&')}`;
+  })();
 
   async function copy(url: string, label: string) {
     try {
@@ -393,6 +398,47 @@ export default function Settings() {
             No scene switching needed. It watches your first in-progress favorite —
             triggering on all sixty games would leave it up permanently.
           </p>
+
+          {/* Which game to follow. The app cannot see your television, so this
+              is a stated preference — and pinning by TEAM rather than game id
+              means the URL still works next Saturday. */}
+          <div className="pb-5">
+            <div className="pb-2 text-base text-field-500">
+              Which game are you watching?
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setBrkWatch('')}
+                className={
+                  'rounded-lg px-4 py-2 text-base font-medium transition-colors ' +
+                  (brkWatch === ''
+                    ? 'bg-close text-field-950'
+                    : 'border border-field-700 text-field-300 hover:border-field-500 hover:bg-field-850')
+                }
+              >
+                Guess
+              </button>
+              {selected.map((team) => (
+                <button
+                  key={team}
+                  onClick={() => setBrkWatch(team)}
+                  className={
+                    'rounded-lg px-4 py-2 text-base font-medium transition-colors ' +
+                    (brkWatch === team
+                      ? 'bg-close text-field-950'
+                      : 'border border-field-700 text-field-300 hover:border-field-500 hover:bg-field-850')
+                  }
+                >
+                  {team}
+                </button>
+              ))}
+            </div>
+            <p className="pt-2 text-sm leading-relaxed text-field-500">
+              {brkWatch
+                ? `Breaks fire on ${brkWatch}'s game. The URL pins the team, not the game, so it still works next week.`
+                : 'Without a pick it follows your first in-progress favorite — fine when one is playing, a coin toss when three are.'}
+            </p>
+          </div>
 
           <div className="flex flex-wrap gap-2 pb-5">
             <Toggle label="Halftime" on={brkHalftime} onChange={setBrkHalftime} />

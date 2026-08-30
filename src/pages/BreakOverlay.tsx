@@ -7,6 +7,7 @@ import { useLeague } from '../hooks/useLeague';
 import { usePoll } from '../hooks/usePoll';
 import { getPlays, getScoreboard } from '../lib/api';
 import { longDate } from '../lib/format';
+import { isFavoriteGame } from '../../shared/favorites';
 import { filterSlate, isFavorite, sortGames } from '../lib/sortGames';
 import type { Game } from '../../shared/types';
 
@@ -41,6 +42,7 @@ export default function BreakOverlay() {
   const force = params.get('force') === '1';
   const autoEnabled = params.get('auto') !== '0';
   const pinnedGameId = params.get('game');
+  const watchTeam = params.get('watch');
   const enabledTriggers = {
     halftime: params.get('halftime') !== 'false' && BREAK.triggers.halftime,
     periodEnd: params.get('quarters') !== 'false' && BREAK.triggers.periodEnd,
@@ -49,6 +51,10 @@ export default function BreakOverlay() {
 
   const games = useMemo(() => data?.games ?? [], [data]);
   const favorite = useCallback((g: Game) => isFavorite(g, favorites, league), [favorites, league]);
+  const matchesTeam = useCallback(
+    (g: Game, team: string) => isFavoriteGame(g, [team], league),
+    [league],
+  );
 
   const state = useBreakState({
     games,
@@ -56,6 +62,8 @@ export default function BreakOverlay() {
     favorites,
     isFavorite: favorite,
     pinnedGameId,
+    watchTeam,
+    matchesTeam,
     force,
     autoEnabled,
     enabledTriggers,
@@ -112,6 +120,14 @@ export default function BreakOverlay() {
             {label && (
               <span className="rounded bg-close/20 px-3 py-1 text-xl font-semibold text-close">
                 {label}
+              </span>
+            )}
+            {/* Name the game that raised this, so it is obvious which one the
+                overlay is following — and obvious when it is following the
+                wrong one. */}
+            {state.focusGame && (
+              <span data-focus-game className="text-xl text-field-500">
+                {state.focusGame.away.shortDisplayName} @ {state.focusGame.home.shortDisplayName}
               </span>
             )}
           </div>

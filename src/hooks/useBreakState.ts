@@ -17,8 +17,18 @@ interface Options {
   plays: PlaysResponse | null;
   favorites: string[];
   isFavorite: (game: Game) => boolean;
-  /** Pin to one game id instead of picking the first in-progress favorite. */
+  /** Pin to one game id. Opaque and changes weekly — prefer watchTeam. */
   pinnedGameId?: string | null;
+  /**
+   * The team you are actually watching, e.g. "Georgia".
+   *
+   * Pinning by TEAM rather than game id is what makes this survive the week:
+   * an ESPN event id is opaque and different every Saturday, whereas "Georgia"
+   * resolves to whatever game Georgia is in today.
+   */
+  watchTeam?: string | null;
+  /** Team matcher, injected so this hook stays league-agnostic. */
+  matchesTeam?: (game: Game, team: string) => boolean;
   /** Always on — for a manual hotkey source. */
   force?: boolean;
   /** Auto-detection disabled — manual only. */
@@ -40,12 +50,34 @@ export function useBreakState({
   plays,
   isFavorite,
   pinnedGameId,
+  watchTeam,
+  matchesTeam,
   force = false,
   autoEnabled = true,
   enabledTriggers = BREAK.triggers,
 }: Options): BreakState {
+  /**
+   * Which game the overlay is watching.
+   *
+   * The app cannot know what is on your television, so this is a stated
+   * preference rather than a detection. In order: an explicit game id, then
+   * the team you said you are watching, then a guess — the first in-progress
+   * favorite. The guess is only right when one favorite is playing; on a
+   * Saturday with three it is a coin toss, which is why watchTeam exists.
+   */
   const focusGame = useMemo(() => {
-    if (pinnedGameId) return games.find((g) => g.id === pinnedGameId) ?? null;
+    if (pinnedGameId) {
+      const pinned = games.find((g) => g.id === pinnedGameId);
+      if (pinned) return pinned;
+    }
+
+    if (watchTeam && matchesTeam) {
+      const watched = games.filter((g) => matchesTeam(g, watchTeam));
+      // Prefer the live one if that team somehow appears twice.
+      const hit = watched.find((g) => g.state === 'in') ?? watched[0];
+      if (hit) return hit;
+    }
+
     const favorites = games.filter(isFavorite);
     return (
       favorites.find((g) => g.state === 'in') ??
@@ -53,8 +85,7 @@ export function useBreakState({
       games.find((g) => g.state === 'in') ??
       null
     );
-    // isFavorite is stable enough in practice; games identity drives this.
-  }, [games, pinnedGameId, isFavorite]);
+  }, [games, pinnedGameId, watchTeam, matchesTeam, isFavorite]);
 
   const [until, setUntil] = useState<number | null>(null);
   const [trigger, setTrigger] = useState<BreakTrigger | null>(null);
