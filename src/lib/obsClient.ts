@@ -10,6 +10,8 @@ import { obsAuthString } from './sha256';
 
 export type ObsStatus = 'idle' | 'connecting' | 'connected' | 'error';
 
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 interface Pending {
   resolve: (data: any) => void;
   reject: (err: Error) => void;
@@ -226,6 +228,100 @@ export class ObsClient {
       return r.inputMuted;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Saves the replay buffer and plays it back through a Media Source, then
+   * hides it again — the corner-box instant replay.
+   *
+   * OBS writes the clip asynchronously and offers no completion signal we can
+   * read without subscribing to events, so the new file is identified by
+   * watching the last-replay path change rather than by guessing at a delay.
+   */
+  async playReplay(mediaSource: string, maxSeconds = 180): Promise<void> {
+    // Note the current clip first: on a rig that saves replays all afternoon,
+    // the path is the only thing distinguishing this save from the last one.
+    let previous: string | null = null;
+    try {
+      const r = await this.request<{ savedReplayPath: string }>('GetLastReplayBufferReplay');
+      previous = r.savedReplayPath ?? null;
+    } catch {
+      // Nothing saved yet this session, which is fine — any path is new.
+    }
+
+    const status = await this.request<{ outputActive: boolean }>('GetReplayBufferStatus');
+    if (!status.outputActive) {
+      await this.request('StartReplayBuffer');
+      throw new Error('Replay buffer was off — started it. Give it a moment, then press again.');
+    }
+
+    await this.request('SaveReplayBuffer');
+    const path = await this.waitForNewReplay(previous);
+
+    await this.request('SetInputSettings', {
+      inputName: mediaSource,
+      inputSettings: { local_file: path, is_local_file: true },
+      overlay: true,
+    });
+
+    await this.setSourceVisible(mediaSource, true);
+    try {
+      await this.request('TriggerMediaInputAction', {
+        inputName: mediaSource,
+        mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART',
+      });
+    } catch {
+      // Sources set to restart when they become active manage without this.
+    }
+
+    try {
+      await this.waitForMediaEnd(mediaSource, maxSeconds);
+    } finally {
+      // Hide it whatever happened: a replay box stuck on screen over live
+      // play is far worse than one that ends early.
+      await this.setSourceVisible(mediaSource, false).catch(() => {});
+    }
+  }
+
+  private async waitForNewReplay(previous: string | null, timeoutMs = 10000): Promise<string> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await delay(300);
+      try {
+        const r = await this.request<{ savedReplayPath: string }>('GetLastReplayBufferReplay');
+        if (r.savedReplayPath && r.savedReplayPath !== previous) return r.savedReplayPath;
+      } catch {
+        // Keep asking; the request fails until the first clip exists.
+      }
+    }
+    throw new Error('Replay saved, but OBS did not report the file in time.');
+  }
+
+  private async waitForMediaEnd(mediaSource: string, maxSeconds: number): Promise<void> {
+    const deadline = Date.now() + maxSeconds * 1000;
+    let seenPlaying = false;
+    while (Date.now() < deadline) {
+      await delay(400);
+      let state: string;
+      try {
+        const r = await this.request<{ mediaState: string }>('GetMediaInputStatus', {
+          inputName: mediaSource,
+        });
+        state = r.mediaState ?? '';
+      } catch {
+        return;
+      }
+      if (state === 'OBS_MEDIA_STATE_PLAYING') {
+        seenPlaying = true;
+        continue;
+      }
+      // Opening and buffering are on the way to playing, and the states before
+      // the first frame look identical to the states after the last one — so
+      // only treat a non-playing state as the end once playback has begun.
+      if (seenPlaying && state !== 'OBS_MEDIA_STATE_OPENING' && state !== 'OBS_MEDIA_STATE_BUFFERING') {
+        return;
+      }
     }
   }
 

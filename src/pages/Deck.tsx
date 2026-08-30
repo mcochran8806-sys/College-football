@@ -27,6 +27,7 @@ interface Connection {
   manualSource: string;
   gameAudioSource: string;
   musicSource: string;
+  replaySource: string;
 }
 
 const DEFAULTS: Connection = {
@@ -37,6 +38,7 @@ const DEFAULTS: Connection = {
   manualSource: 'Manual scoreboard',
   gameAudioSource: 'Game Audio',
   musicSource: 'Break music',
+  replaySource: 'Instant replay',
 };
 
 export default function Deck() {
@@ -54,6 +56,8 @@ export default function Deck() {
     }
   });
   const [showSetup, setShowSetup] = useState(false);
+  /** Held for the length of the clip, so the button cannot be double-fired. */
+  const [replaying, setReplaying] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [, force] = useState(0);
   /**
@@ -278,13 +282,24 @@ export default function Deck() {
           />
         </div>
 
-        <div className="pt-3">
+        <div className="grid gap-3 pt-3">
           <DeckButton
-            label="Save Replay"
-            hint="keep the last 60s"
+            label={replaying ? 'Playing…' : 'Instant Replay'}
+            hint={replaying ? 'box hides itself' : 'show it in the corner'}
             tone="replay"
             wide
-            disabled={!connected}
+            disabled={!connected || replaying}
+            onPress={async () => {
+              setReplaying(true);
+              await run('Replay over', () => obs.playReplay(conn.replaySource.trim()));
+              setReplaying(false);
+            }}
+          />
+          <DeckButton
+            label="Save Replay"
+            hint="keep it, do not play it"
+            wide
+            disabled={!connected || replaying}
             onPress={() => run('Replay saved', () => obs.saveReplay())}
           />
         </div>
@@ -306,6 +321,7 @@ export default function Deck() {
                 ['manualSource', 'Manual scoreboard source name'],
                 ['gameAudioSource', 'Game audio source name'],
                 ['musicSource', 'Break music source name'],
+                ['replaySource', 'Instant replay media source name'],
               ] as const
             ).map(([key, label]) => (
               <label key={key} className="block pb-3">

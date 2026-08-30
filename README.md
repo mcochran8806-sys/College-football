@@ -601,7 +601,8 @@ Nothing else to install.
 | Music | Starts or stops the break music on its own |
 | End Break | Hides the auto overlay, ending a break early |
 | Resume Auto | Re-arms automatic breaks |
-| Save Replay | Saves the replay buffer, starting it first if it is off |
+| Instant Replay | Saves the buffer and plays it back in a corner box, then hides it |
+| Save Replay | Saves the replay buffer without playing it |
 
 Above the buttons is a live readout of your favorite game — score, clock and a
 red-zone flag — so the phone doubles as a glance screen.
@@ -662,6 +663,30 @@ Properties or you will not hear it in the room — only the stream will.
 The sink is not persistent; an autostart entry running that same `pactl` line
 restores it on login, and because the sink name is stable the player remembers
 its routing.
+
+### Instant replay
+
+One tap saves the replay buffer, points a Media Source at the clip OBS just
+wrote, shows it in the corner, and hides it again when it ends. Set it up once:
+
+1. **Sources → + → Media Source**, named `Instant replay`. Leave the file
+   blank — the deck fills it in on every press.
+2. Tick **Restart playback when source becomes active**.
+3. Size and position it where you want the box, then click the eye to hide it.
+4. **Mute it in the Audio Mixer**, or the replay commentary talks over the live
+   game.
+5. Make sure the replay buffer is running. If it is off, the first press starts
+   it and asks you to press again — the buffer has no past to save yet.
+
+OBS writes the clip asynchronously and gives no completion signal readable
+without an event subscription, so the new file is identified by watching the
+last-replay path change rather than by guessing at a delay. Playback end is
+polled the same way, and the box is hidden in a `finally` — a replay stuck on
+screen over live play is worse than one that ends early.
+
+The states before the first frame look identical to the states after the last,
+so the poll only treats a non-playing state as the end **after** it has seen
+playback actually begin.
 
 ### Setup
 
