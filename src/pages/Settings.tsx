@@ -62,6 +62,11 @@ export default function Settings() {
   const [tickerFinal, setTickerFinal] = useState(true);
   const [tickerHeight, setTickerHeight] = useState(90);
 
+  // Auto commercial-break overlay options.
+  const [brkHalftime, setBrkHalftime] = useState(true);
+  const [brkQuarters, setBrkQuarters] = useState(true);
+  const [brkScores, setBrkScores] = useState(true);
+
   // Mirror to storage as you go, so opening the bare URL on THIS device
   // remembers. The generated URL is still what makes it stick on a TV.
   useEffect(() => {
@@ -166,6 +171,19 @@ export default function Settings() {
     if (!tickerFinal) p.push('final=false');
     return `${origin}/ticker${p.length > 0 ? `?${p.join('&')}` : ''}`;
   })();
+
+  const breakUrl = (() => {
+    const p = [...parts];
+    if (!brkHalftime) p.push('halftime=false');
+    if (!brkQuarters) p.push('quarters=false');
+    if (!brkScores) p.push('scores=false');
+    return `${origin}/break${p.length > 0 ? `?${p.join('&')}` : ''}`;
+  })();
+
+  // The manual source: always on, auto-detection off, toggled by an OBS hotkey.
+  const breakManualUrl = `${origin}/break${
+    parts.length > 0 ? `?${parts.join('&')}&force=1` : '?force=1'
+  }`;
 
   async function copy(url: string, label: string) {
     try {
@@ -360,6 +378,63 @@ export default function Settings() {
           </div>
         </section>
 
+        {/* ---- Auto commercial-break overlay --------------------------- */}
+        <section
+          id="obs-break"
+          className="mt-8 scroll-mt-64 rounded-2xl border border-field-800 bg-field-900 p-5"
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-3 pb-1">
+            <h2 className="text-2xl font-bold tracking-tight">Auto break scoreboard</h2>
+            <span className="text-base text-field-500">Browser Source, full canvas size</span>
+          </div>
+          <p className="max-w-2xl pb-5 text-base leading-relaxed text-field-500">
+            Sits in your scene permanently and shows nothing until the game data says a
+            break is likely, then fades a full scoreboard in and back out on its own.
+            No scene switching needed. It watches your first in-progress favorite —
+            triggering on all sixty games would leave it up permanently.
+          </p>
+
+          <div className="flex flex-wrap gap-2 pb-5">
+            <Toggle label="Halftime" on={brkHalftime} onChange={setBrkHalftime} />
+            <Toggle label="End of quarter" on={brkQuarters} onChange={setBrkQuarters} />
+            <Toggle label="After a score" on={brkScores} onChange={setBrkScores} />
+          </div>
+
+          <UrlRow
+            label="Auto overlay"
+            url={breakUrl}
+            onCopy={() => copy(breakUrl, 'Break overlay')}
+          />
+          <UrlRow
+            label="Manual (hotkey)"
+            url={breakManualUrl}
+            onCopy={() => copy(breakManualUrl, 'Manual scoreboard')}
+          />
+
+          <div className="mt-4 rounded-xl border border-field-800 bg-field-950 p-4 text-base leading-relaxed text-field-500">
+            <div className="pb-2 font-semibold text-field-300">Hotkeys, in OBS</div>
+            Add both URLs as Browser Sources at your full canvas size. Leave{' '}
+            <span className="text-field-300">Shutdown source when not visible</span>{' '}
+            <em>unchecked</em> on the auto one — it needs to keep running to notice a
+            break. Then in <span className="text-field-300">Settings → Hotkeys</span>:
+            <ul className="list-disc space-y-1 py-2 pl-6">
+              <li>
+                <span className="text-field-300">Hide “Auto overlay”</span> — ends a break
+                early. It remembers, so it will not pop back up for the same one.
+              </li>
+              <li>
+                <span className="text-field-300">Show “Auto overlay”</span> — resumes
+                automatic breaks.
+              </li>
+              <li>
+                <span className="text-field-300">Show / Hide “Manual”</span> — force the
+                scoreboard up any time, regardless of what the game is doing.
+              </li>
+            </ul>
+            Keep the manual source hidden by default and above the auto one in the list.
+          </div>
+        </section>
+
         <section className="pt-8">
           <input
             ref={filterRef}
@@ -455,6 +530,33 @@ export default function Settings() {
         </footer>
       </div>
     </div>
+  );
+}
+
+function Toggle({
+  label,
+  on,
+  onChange,
+}: {
+  label: string;
+  on: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <button
+      onClick={() => onChange(!on)}
+      aria-pressed={on}
+      className={
+        'rounded-lg px-4 py-2 text-base font-medium transition-colors ' +
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-close ' +
+        (on
+          ? 'bg-close text-field-950'
+          : 'border border-field-700 text-field-500 hover:border-field-500 hover:bg-field-850')
+      }
+    >
+      {on ? '✓ ' : ''}
+      {label}
+    </button>
   );
 }
 

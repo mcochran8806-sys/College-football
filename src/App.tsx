@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import HighlightWall from './pages/HighlightWall';
 import Settings from './pages/Settings';
 import Ticker from './pages/Ticker';
+import BreakOverlay from './pages/BreakOverlay';
 import Scoreboard from './pages/Scoreboard';
 
 /**
@@ -23,5 +24,6 @@ export default function App() {
   if (route === '/highlights') return <HighlightWall />;
   if (route === '/settings') return <Settings />;
   if (route === '/ticker') return <Ticker />;
+  if (route === '/break') return <BreakOverlay />;
   return <Scoreboard />;
 }

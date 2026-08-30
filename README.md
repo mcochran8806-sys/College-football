@@ -9,6 +9,7 @@ deployment**:
 | `/highlights` | Highlight wall | Auto-rotating YouTube highlights + live scoring-play interstitials |
 | `/settings` | Team picker | Click favorites per league, get a URL to point each TV at |
 | `/ticker` | OBS score ticker | Transparent broadcast-style crawl for an OBS Browser Source |
+| `/break` | Auto break scoreboard | Full scoreboard that raises itself during commercial breaks |
 
 Add `?league=nfl` to any of them for the NFL; college football is the default.
 
@@ -435,6 +436,65 @@ compositor thread. OBS renders this every frame alongside everything else in
 your scene, so anything triggering layout per frame would show up as dropped
 frames. Duration is derived from the measured track width, so the crawl holds a
 constant pixels-per-second whether the slate has 12 games or 60.
+
+## Auto commercial-break overlay
+
+OBS cannot detect a commercial — it composites pixels, it does not read
+content. But football breaks are predictable from game state, which the app
+already polls, so `/break` **predicts rather than detects**.
+
+It sits in the scene permanently and renders nothing until a trigger fires,
+then fades a full scoreboard in and back out on its own. No scene switching,
+no OBS automation, no WebSocket.
+
+### Triggers
+
+Only signals that are near-certain, watched on the **focus game** — the first
+in-progress favorite, or `?game=<id>`. Triggering on all sixty games would
+leave the scoreboard up permanently.
+
+| Trigger | Confidence | Default hold |
+|---|---|---|
+| Halftime | Certain | 10 min |
+| End of quarter | Certain | 2.5 min |
+| Scoring play | High — there is a break before the kickoff and usually after | 100s |
+
+A hard ceiling (`BREAK.maxHoldSeconds`, 12 min) guarantees the screen comes
+back however confused the logic gets. It fails closed: when unsure it shows
+nothing, because a missed break leaves you watching the game while a false
+positive covers it.
+
+This predicts when a break is *likely*, not when your network actually cuts to
+ads. Expect it to be right most of the time and out by 10-20 seconds often.
+
+### Hotkeys
+
+A background browser source never receives keyboard input, so hotkeys work
+through **OBS source visibility** instead. Add both URLs from `/settings` as
+Browser Sources at full canvas size:
+
+| Source | URL | Default state |
+|---|---|---|
+| Auto overlay | `/break?f=...` | visible |
+| Manual | `/break?f=...&force=1` | hidden, above the auto one |
+
+Leave **Shutdown source when not visible** *unchecked* on the auto source — it
+has to keep running to notice a break. Then in **Settings -> Hotkeys**:
+
+- **Hide "Auto overlay"** — ends a break early. The page notices it was hidden
+  mid-break and marks that occurrence dismissed, so re-showing the source does
+  not immediately raise the same break again.
+- **Show "Auto overlay"** — resumes automatic breaks.
+- **Show / Hide "Manual"** — force the scoreboard up at any time.
+
+### Query parameters
+
+| Parameter | Effect |
+|---|---|
+| `force=1` | Always shown — the manual source |
+| `auto=0` | Never auto-triggers; manual only |
+| `game=<id>` | Pin to one game instead of the first in-progress favorite |
+| `halftime` / `quarters` / `scores` | `false` to disable that trigger |
 
 ## Configuration
 

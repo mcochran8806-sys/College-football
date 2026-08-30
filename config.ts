@@ -269,6 +269,39 @@ export const TICKER = {
 } as const;
 
 /**
+ * Auto commercial-break overlay (/break).
+ *
+ * OBS cannot detect a commercial — it composites pixels, it does not read
+ * content. But football breaks are predictable from game state, which we
+ * already poll: halftime, the end of a quarter, and the moments after a score
+ * are all near-certain. So this predicts rather than detects.
+ *
+ * It fires on the FOCUS GAME only — the first in-progress favorite, or ?game=.
+ * Triggering on any of sixty games would put the scoreboard up permanently.
+ *
+ * Failure mode is deliberate: when unsure, show nothing. A missed break leaves
+ * you watching the game; a false positive covers it.
+ */
+export const BREAK = {
+  /** Which signals may raise the overlay. */
+  triggers: {
+    halftime: true,
+    periodEnd: true,
+    scoringPlay: true,
+  },
+  /** Seconds to hold for each trigger. Networks vary; these are averages. */
+  hold: {
+    halftime: 600,
+    periodEnd: 150,
+    scoringPlay: 100,
+  },
+  /** Hard ceiling. However confused the logic gets, the screen comes back. */
+  maxHoldSeconds: 720,
+  /** Fade in/out, milliseconds. */
+  fadeMs: 450,
+} as const;
+
+/**
  * Debug only. Leave empty. When set to YYYYMMDD the API functions will request
  * that slate from ESPN instead of today's. The TVs never send this.
  */
