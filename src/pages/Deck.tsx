@@ -25,6 +25,8 @@ interface Connection {
   password: string;
   autoSource: string;
   manualSource: string;
+  gameAudioSource: string;
+  musicSource: string;
 }
 
 const DEFAULTS: Connection = {
@@ -33,6 +35,8 @@ const DEFAULTS: Connection = {
   password: '',
   autoSource: 'Auto break',
   manualSource: 'Manual scoreboard',
+  gameAudioSource: 'Game Audio',
+  musicSource: 'Break music',
 };
 
 export default function Deck() {
@@ -96,6 +100,48 @@ export default function Deck() {
     }
   };
 
+  /**
+   * One tap for the whole commercial routine: scoreboard up, game silenced,
+   * music running — and the exact reverse coming back.
+   *
+   * Each step is attempted independently so a half-configured rig still does
+   * what it can. A blank source name means "I do not have that, skip it",
+   * which is what makes this degrade cleanly to a plain scoreboard toggle for
+   * anyone who never set up the music lane.
+   */
+  const setBreakMode = async (on: boolean) => {
+    const steps: Array<[string, () => Promise<void>]> = [];
+    // Audio first — it is the change you actually notice in the room.
+    if (conn.gameAudioSource.trim())
+      steps.push(['game audio', () => obs.setInputMute(conn.gameAudioSource.trim(), on)]);
+    if (conn.musicSource.trim())
+      steps.push(['music', () => obs.setInputMute(conn.musicSource.trim(), !on)]);
+    if (conn.manualSource.trim())
+      steps.push(['scoreboard', () => obs.setSourceVisible(conn.manualSource.trim(), on)]);
+
+    const failed: string[] = [];
+    for (const [name, fn] of steps) {
+      try {
+        await fn();
+      } catch {
+        failed.push(name);
+      }
+    }
+
+    if (failed.length === steps.length) {
+      throw new Error(
+        steps.length
+          ? `Nothing worked — check the source names in setup (${failed.join(', ')}).`
+          : 'No sources configured. Open setup and name them.',
+      );
+    }
+    if (failed.length) {
+      // Partial success is worth saying out loud: the rig looks half-switched
+      // and the reason is almost always a name typed differently in OBS.
+      throw new Error(`${on ? 'Commercial' : 'Back to game'} — but ${failed.join(' and ')} not found.`);
+    }
+  };
+
   const focusGame = useMemo<Game | null>(() => {
     const games = data?.games ?? [];
     const favs = games.filter((g) => isFavorite(g, favorites, league));
@@ -154,21 +200,17 @@ export default function Deck() {
         {/* --- buttons ----------------------------------------------------- */}
         <div className="grid grid-cols-2 gap-3">
           <DeckButton
-            label="Scoreboard Up"
-            hint="show now"
+            label="Commercial"
+            hint="board up · music on"
             tone="primary"
             disabled={!connected}
-            onPress={() =>
-              run('Scoreboard up', () => obs.setSourceVisible(conn.manualSource, true))
-            }
+            onPress={() => run('Commercial', () => setBreakMode(true))}
           />
           <DeckButton
             label="Back to Game"
-            hint="hide it"
+            hint="board off · sound on"
             disabled={!connected}
-            onPress={() =>
-              run('Back to game', () => obs.setSourceVisible(conn.manualSource, false))
-            }
+            onPress={() => run('Back to game', () => setBreakMode(false))}
           />
           <DeckButton
             label="End Break"
@@ -209,7 +251,9 @@ export default function Deck() {
                 ['port', 'Port'],
                 ['password', 'WebSocket password'],
                 ['autoSource', 'Auto overlay source name'],
-                ['manualSource', 'Manual source name'],
+                ['manualSource', 'Manual scoreboard source name'],
+                ['gameAudioSource', 'Game audio source name'],
+                ['musicSource', 'Break music source name'],
               ] as const
             ).map(([key, label]) => (
               <label key={key} className="block pb-3">
@@ -241,7 +285,9 @@ export default function Deck() {
             <p className="pt-3 text-sm leading-relaxed text-field-500">
               In OBS: <span className="text-field-300">Tools → WebSocket Server Settings</span> →
               enable it, then <span className="text-field-300">Show Connect Info</span> for the
-              password. Source names must match exactly.
+              password. Source names must match exactly — copy them from the Sources and
+              Audio Mixer panels. Leave a name blank to drop that step from the Commercial
+              button.
             </p>
           </section>
         )}

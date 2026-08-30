@@ -571,8 +571,8 @@ Nothing else to install.
 
 | Button | Does |
 |---|---|
-| Scoreboard Up | Shows the manual break source |
-| Back to Game | Hides it |
+| Commercial | Scoreboard up, game audio muted, break music unmuted |
+| Back to Game | The exact reverse |
 | End Break | Hides the auto overlay, ending a break early |
 | Resume Auto | Re-arms automatic breaks |
 | Save Replay | Saves the replay buffer, starting it first if it is off |
@@ -580,12 +580,48 @@ Nothing else to install.
 Above the buttons is a live readout of your favorite game — score, clock and a
 red-zone flag — so the phone doubles as a glance screen.
 
+### Commercial mode
+
+**Commercial** and **Back to Game** each drive three things at once, so a break
+is one tap rather than a hunt for three hotkeys. Every step is attempted
+independently: if the music source is missing, the scoreboard and the game
+audio still switch and the toast names what it could not find. **Leave a source
+name blank in setup to drop that step entirely** — with no music lane
+configured, Commercial degrades to a plain scoreboard toggle.
+
+The game audio and music sources are muted via `SetInputMute`, which acts on
+the global input rather than a scene item, so the pair keeps working if you
+switch scenes mid-break.
+
+#### The music lane, on Linux
+
+The Flatpak build of OBS has no VLC Video Source — libvlc is not in the
+Freedesktop runtime — so playlists come in over a dedicated audio channel
+instead. This is the better arrangement anyway: any player works, media keys
+keep working, and OBS never needs filesystem permission for your music folder.
+
+```bash
+# a lane that is not your speakers
+pactl load-module module-null-sink sink_name=obs_music \
+  sink_properties=device.description=OBS_Music
+```
+
+Point your music player at **OBS_Music** in `pavucontrol`, then add an **Audio
+Output Capture (PulseAudio)** source in OBS named `Break music` on device
+**Monitor of OBS_Music**. Set it to **Monitor and Output** in Advanced Audio
+Properties or you will not hear it in the room — only the stream will.
+
+The sink is not persistent; an autostart entry running that same `pactl` line
+restores it on login, and because the sink name is stable the player remembers
+its routing.
+
 ### Setup
 
 1. OBS: **Tools → WebSocket Server Settings** → enable, then **Show Connect
    Info** for the password. (Built in since OBS 28; no plugin.)
 2. Open `/deck` on the phone, tap the status pill, enter the PC's IP, port
-   `4455`, and the password. Source names must match your OBS sources exactly.
+   `4455`, and the password. Source names must match your OBS sources exactly —
+   copy them from the Sources and Audio Mixer panels.
 3. Save. Settings persist in that phone's local storage.
 
 It reconnects when the phone wakes, since a locked screen drops the socket.

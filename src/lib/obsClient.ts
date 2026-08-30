@@ -170,6 +170,28 @@ export class ObsClient {
     }
   }
 
+  /**
+   * Mute or unmute an audio input.
+   *
+   * Inputs are global, not per scene, so unlike scene items this needs no
+   * scene lookup. Throws if the input does not exist — callers that treat a
+   * missing music source as "not set up yet" should catch it.
+   */
+  async setInputMute(input: string, muted: boolean): Promise<void> {
+    await this.request('SetInputMute', { inputName: input, inputMuted: muted });
+  }
+
+  async isInputMuted(input: string): Promise<boolean | null> {
+    try {
+      const r = await this.request<{ inputMuted: boolean }>('GetInputMute', {
+        inputName: input,
+      });
+      return r.inputMuted;
+    } catch {
+      return null;
+    }
+  }
+
   /** Saves the replay buffer, starting it first if it is not running. */
   async saveReplay(): Promise<void> {
     const status = await this.request<{ outputActive: boolean }>('GetReplayBufferStatus');
