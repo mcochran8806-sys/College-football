@@ -146,8 +146,8 @@ export default function Deck() {
   const setBreakMode = async (on: boolean) => {
     const steps: Array<[string, () => Promise<void>]> = [];
     // Audio first — it is the change you actually notice in the room.
-    if (gameInput) steps.push(['game audio', () => obs.setInputMute(gameInput, on)]);
-    if (musicInput) steps.push(['music', () => obs.setInputMute(musicInput, !on)]);
+    if (gameInput) steps.push(['game audio', () => obs.setInputSilenced(gameInput, on)]);
+    if (musicInput) steps.push(['music', () => obs.setInputSilenced(musicInput, !on)]);
     if (conn.manualSource.trim())
       steps.push(['scoreboard', () => obs.setSourceVisible(conn.manualSource.trim(), on)]);
 
@@ -249,7 +249,7 @@ export default function Deck() {
             disabled={!connected || audio.game === null}
             onPress={() =>
               run(audio.game ? 'Game audio on' : 'Game audio muted', () =>
-                obs.setInputMute(gameInput, !audio.game),
+                obs.setInputSilenced(gameInput, !audio.game),
               )
             }
           />
@@ -260,7 +260,7 @@ export default function Deck() {
             disabled={!connected || audio.music === null}
             onPress={() =>
               run(audio.music ? 'Music on' : 'Music off', () =>
-                obs.setInputMute(musicInput, !audio.music),
+                obs.setInputSilenced(musicInput, !audio.music),
               )
             }
           />

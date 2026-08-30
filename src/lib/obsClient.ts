@@ -23,6 +23,8 @@ export class ObsClient {
   private nextId = 1;
   /** sceneItemId lookups are stable for a session; resolving costs a round trip. */
   private itemIds = new Map<string, number>();
+  /** Pre-silence levels, so restoring a source returns it to its own volume. */
+  private volumes = new Map<string, number>();
 
   status: ObsStatus = 'idle';
   error: string | null = null;
@@ -108,6 +110,8 @@ export class ObsClient {
     this.socket = null;
     this.pending.clear();
     this.itemIds.clear();
+    // Levels are deliberately kept: a phone that slept mid-break still knows
+    // what to restore when it wakes up and reconnects.
   }
 
   request<T = any>(requestType: string, requestData?: unknown): Promise<T> {
@@ -179,6 +183,39 @@ export class ObsClient {
    */
   async setInputMute(input: string, muted: boolean): Promise<void> {
     await this.request('SetInputMute', { inputName: input, inputMuted: muted });
+  }
+
+  /**
+   * Silence or restore an audio input — for real, including what you hear.
+   *
+   * Mute alone is not enough. It cuts the source from the stream, but audio
+   * monitoring is a separate branch of the pipeline, so on a rig where the
+   * speakers are fed by monitoring the source stays audible while OBS shows it
+   * muted. Dropping the volume to zero closes that branch too, and the mute
+   * still carries the state that the UI reads back.
+   *
+   * The prior level is remembered rather than assumed, so a source running at
+   * half volume comes back at half volume instead of jumping to full.
+   */
+  async setInputSilenced(input: string, silenced: boolean): Promise<void> {
+    if (silenced) {
+      try {
+        const v = await this.request<{ inputVolumeMul: number }>('GetInputVolume', {
+          inputName: input,
+        });
+        if (v.inputVolumeMul > 0) this.volumes.set(input, v.inputVolumeMul);
+      } catch {
+        // Losing the old level is survivable; failing to silence is not.
+      }
+      await this.request('SetInputVolume', { inputName: input, inputVolumeMul: 0 });
+      await this.setInputMute(input, true);
+    } else {
+      await this.setInputMute(input, false);
+      await this.request('SetInputVolume', {
+        inputName: input,
+        inputVolumeMul: this.volumes.get(input) ?? 1,
+      });
+    }
   }
 
   async isInputMuted(input: string): Promise<boolean | null> {

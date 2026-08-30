@@ -591,9 +591,15 @@ audio still switch and the toast names what it could not find. **Leave a source
 name blank in setup to drop that step entirely** — with no music lane
 configured, Commercial degrades to a plain scoreboard toggle.
 
-The game audio and music sources are muted via `SetInputMute`, which acts on
-the global input rather than a scene item, so the pair keeps working if you
-switch scenes mid-break.
+Silencing a source drops its volume to zero **and** mutes it, rather than just
+muting. Mute alone cuts a source from the stream, but audio monitoring is a
+separate branch of the OBS pipeline — so on a rig where the speakers are fed by
+monitoring, a muted source keeps playing while OBS shows it muted. Zeroing the
+volume closes that branch too. The prior level is remembered, so a source
+running at half volume comes back at half volume.
+
+Both act on the global audio input rather than a scene item, so the pair keeps
+working if you switch scenes mid-break.
 
 **Game Audio** and **Music** are the same two mutes broken out individually,
 for when you want one without the other — killing a bad commentary team while
