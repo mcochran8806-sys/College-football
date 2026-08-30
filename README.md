@@ -573,6 +573,8 @@ Nothing else to install.
 |---|---|
 | Commercial | Scoreboard up, game audio muted, break music unmuted |
 | Back to Game | The exact reverse |
+| Game Audio | Mutes or unmutes the game on its own, mid-play |
+| Music | Starts or stops the break music on its own |
 | End Break | Hides the auto overlay, ending a break early |
 | Resume Auto | Re-arms automatic breaks |
 | Save Replay | Saves the replay buffer, starting it first if it is off |
@@ -592,6 +594,22 @@ configured, Commercial degrades to a plain scoreboard toggle.
 The game audio and music sources are muted via `SetInputMute`, which acts on
 the global input rather than a scene item, so the pair keeps working if you
 switch scenes mid-break.
+
+**Game Audio** and **Music** are the same two mutes broken out individually,
+for when you want one without the other — killing a bad commentary team while
+the play continues, say. Each reads its live state from OBS on connect and
+after every action, shown under the label and highlighted amber when it is in
+the break-side position. That readout doubles as the diagnostic when the music
+will not play:
+
+| Hint | Means |
+|---|---|
+| `not found` | No OBS input by that name — fix the name in setup |
+| `off` / `on` | The name is right and the mute is landing |
+
+So a source reading `playing` while the room stays silent is not a deck
+problem: the audio is not reaching that input, or **Audio Monitoring** on it is
+still **Monitor Off**, which sends to the stream only.
 
 #### The music lane, on Linux
 

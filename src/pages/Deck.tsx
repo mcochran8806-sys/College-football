@@ -56,10 +56,22 @@ export default function Deck() {
   const [showSetup, setShowSetup] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [, force] = useState(0);
+  /**
+   * Live mute state for the two audio inputs, or null when OBS has no input by
+   * that name. Shown on the toggles, which makes it the first place to look
+   * when the music does not come through: a name that is wrong reads "not
+   * found", while a name that is right but silent means the problem is
+   * downstream in OBS — routing or audio monitoring — not here.
+   */
+  const [audio, setAudio] = useState<{ game: boolean | null; music: boolean | null }>({
+    game: null,
+    music: null,
+  });
 
   const client = useRef<ObsClient | null>(null);
   if (client.current === null) client.current = new ObsClient();
   const obs = client.current;
+  const connected = obs.status === 'connected';
 
   useEffect(() => {
     obs.onChange = () => force((n) => n + 1);
@@ -89,6 +101,25 @@ export default function Deck() {
     setTimeout(() => setToast(null), 2600);
   };
 
+  const gameInput = conn.gameAudioSource.trim();
+  const musicInput = conn.musicSource.trim();
+
+  const refreshAudio = useCallback(async () => {
+    const game = gameInput ? await obs.isInputMuted(gameInput) : null;
+    const music = musicInput ? await obs.isInputMuted(musicInput) : null;
+    setAudio({ game, music });
+  }, [obs, gameInput, musicInput]);
+
+  // Read the real state whenever the socket comes up, so the toggles never
+  // show a guess — including after the phone wakes and reconnects.
+  useEffect(() => {
+    if (!connected) {
+      setAudio({ game: null, music: null });
+      return;
+    }
+    void refreshAudio();
+  }, [connected, refreshAudio]);
+
   const run = async (label: string, fn: () => Promise<void>) => {
     try {
       await fn();
@@ -97,6 +128,9 @@ export default function Deck() {
       navigator.vibrate?.(18);
     } catch (err) {
       say(err instanceof Error ? err.message : String(err));
+    } finally {
+      // Even a failed action may have half-applied, so re-read either way.
+      if (connected) void refreshAudio();
     }
   };
 
@@ -112,10 +146,8 @@ export default function Deck() {
   const setBreakMode = async (on: boolean) => {
     const steps: Array<[string, () => Promise<void>]> = [];
     // Audio first — it is the change you actually notice in the room.
-    if (conn.gameAudioSource.trim())
-      steps.push(['game audio', () => obs.setInputMute(conn.gameAudioSource.trim(), on)]);
-    if (conn.musicSource.trim())
-      steps.push(['music', () => obs.setInputMute(conn.musicSource.trim(), !on)]);
+    if (gameInput) steps.push(['game audio', () => obs.setInputMute(gameInput, on)]);
+    if (musicInput) steps.push(['music', () => obs.setInputMute(musicInput, !on)]);
     if (conn.manualSource.trim())
       steps.push(['scoreboard', () => obs.setSourceVisible(conn.manualSource.trim(), on)]);
 
@@ -147,8 +179,6 @@ export default function Deck() {
     const favs = games.filter((g) => isFavorite(g, favorites, league));
     return favs.find((g) => g.state === 'in') ?? favs[0] ?? null;
   }, [data, favorites, league]);
-
-  const connected = obs.status === 'connected';
 
   return (
     <div className="settings-screen min-h-full bg-field-950 p-4 text-field-100">
@@ -211,6 +241,28 @@ export default function Deck() {
             hint="board off · sound on"
             disabled={!connected}
             onPress={() => run('Back to game', () => setBreakMode(false))}
+          />
+          <DeckButton
+            label="Game Audio"
+            hint={audio.game === null ? 'not found' : audio.game ? 'muted' : 'on'}
+            active={audio.game === true}
+            disabled={!connected || audio.game === null}
+            onPress={() =>
+              run(audio.game ? 'Game audio on' : 'Game audio muted', () =>
+                obs.setInputMute(gameInput, !audio.game),
+              )
+            }
+          />
+          <DeckButton
+            label="Music"
+            hint={audio.music === null ? 'not found' : audio.music ? 'off' : 'playing'}
+            active={audio.music === false}
+            disabled={!connected || audio.music === null}
+            onPress={() =>
+              run(audio.music ? 'Music on' : 'Music off', () =>
+                obs.setInputMute(musicInput, !audio.music),
+              )
+            }
           />
           <DeckButton
             label="End Break"
@@ -309,6 +361,7 @@ function DeckButton({
   disabled,
   tone,
   wide,
+  active,
 }: {
   label: string;
   hint: string;
@@ -316,13 +369,17 @@ function DeckButton({
   disabled?: boolean;
   tone?: 'primary' | 'replay';
   wide?: boolean;
+  /** Highlights the break-side state — game muted, or music playing. */
+  active?: boolean;
 }) {
   const base =
     tone === 'primary'
       ? 'bg-close text-field-950'
       : tone === 'replay'
         ? 'bg-live text-field-950'
-        : 'border border-field-700 bg-field-900 text-field-100';
+        : active
+          ? 'border-2 border-close bg-field-900 text-close'
+          : 'border border-field-700 bg-field-900 text-field-100';
 
   return (
     <button
